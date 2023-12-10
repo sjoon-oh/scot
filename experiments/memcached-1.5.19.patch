@@ -1,0 +1,266 @@
+diff --git a/doc/Makefile b/doc/Makefile
+index 82064a2..d5cf453 100644
+--- a/doc/Makefile
++++ b/doc/Makefile
+@@ -152,12 +152,12 @@ MANS = $(man_MANS)
+ am__tagged_files = $(HEADERS) $(SOURCES) $(TAGS_FILES) $(LISP)
+ am__DIST_COMMON = $(srcdir)/Makefile.in
+ DISTFILES = $(DIST_COMMON) $(DIST_SOURCES) $(TEXINFOS) $(EXTRA_DIST)
+-ACLOCAL = ${SHELL} /home/dormando/d/p/danga/git/memcached/missing aclocal-1.15
++ACLOCAL = ${SHELL} /home/oslab/sjoon/workspace/git/rsdco/experiments/memcached-1.5.19/missing aclocal-1.15
+ AMTAR = $${TAR-tar}
+ AM_DEFAULT_VERBOSITY = 1
+-AUTOCONF = ${SHELL} /home/dormando/d/p/danga/git/memcached/missing autoconf
+-AUTOHEADER = ${SHELL} /home/dormando/d/p/danga/git/memcached/missing autoheader
+-AUTOMAKE = ${SHELL} /home/dormando/d/p/danga/git/memcached/missing automake-1.15
++AUTOCONF = ${SHELL} /home/oslab/sjoon/workspace/git/rsdco/experiments/memcached-1.5.19/missing autoconf
++AUTOHEADER = ${SHELL} /home/oslab/sjoon/workspace/git/rsdco/experiments/memcached-1.5.19/missing autoheader
++AUTOMAKE = ${SHELL} /home/oslab/sjoon/workspace/git/rsdco/experiments/memcached-1.5.19/missing automake-1.15
+ AWK = gawk
+ CC = gcc
+ CCDEPMODE = depmode=gcc3
+@@ -172,10 +172,10 @@ DTRACEFLAGS =
+ ECHO_C = 
+ ECHO_N = -n
+ ECHO_T = 
+-EGREP = /bin/grep -E
++EGREP = /usr/bin/grep -E
+ ENABLE_SASL = 
+ EXEEXT = 
+-GREP = /bin/grep
++GREP = /usr/bin/grep
+ INSTALL = /usr/bin/install -c
+ INSTALL_DATA = ${INSTALL} -m 644
+ INSTALL_PROGRAM = ${INSTALL}
+@@ -183,10 +183,10 @@ INSTALL_SCRIPT = ${INSTALL}
+ INSTALL_STRIP_PROGRAM = $(install_sh) -c -s
+ LDFLAGS = 
+ LIBOBJS = 
+-LIBS = -levent 
++LIBS = -lhugetlbfs -levent 
+ LTLIBOBJS = 
+-MAKEINFO = ${SHELL} /home/dormando/d/p/danga/git/memcached/missing makeinfo
+-MKDIR_P = /bin/mkdir -p
++MAKEINFO = ${SHELL} /home/oslab/sjoon/workspace/git/rsdco/experiments/memcached-1.5.19/missing makeinfo
++MKDIR_P = /usr/bin/mkdir -p
+ OBJEXT = o
+ PACKAGE = memcached
+ PACKAGE_BUGREPORT = memcached@googlegroups.com
+@@ -196,19 +196,19 @@ PACKAGE_TARNAME = memcached
+ PACKAGE_URL = 
+ PACKAGE_VERSION = 1.5.19
+ PATH_SEPARATOR = :
+-PROFILER = /usr/bin/gcov
++PROFILER = /opt/rh/devtoolset-7/root/usr/bin/gcov
+ PROFILER_FLAGS = -fprofile-arcs -ftest-coverage
+ PROFILER_LDFLAGS = -lgcov
+ SET_MAKE = 
+-SHELL = /bin/bash
++SHELL = /bin/sh
+ STRIP = 
+ VERSION = 1.5.19
+ XML2RFC = no
+-XSLTPROC = no
+-abs_builddir = /home/dormando/d/p/danga/git/memcached/doc
+-abs_srcdir = /home/dormando/d/p/danga/git/memcached/doc
+-abs_top_builddir = /home/dormando/d/p/danga/git/memcached
+-abs_top_srcdir = /home/dormando/d/p/danga/git/memcached
++XSLTPROC = /usr/bin/xsltproc
++abs_builddir = /home/oslab/sjoon/workspace/git/rsdco/experiments/memcached-1.5.19/doc
++abs_srcdir = /home/oslab/sjoon/workspace/git/rsdco/experiments/memcached-1.5.19/doc
++abs_top_builddir = /home/oslab/sjoon/workspace/git/rsdco/experiments/memcached-1.5.19
++abs_top_srcdir = /home/oslab/sjoon/workspace/git/rsdco/experiments/memcached-1.5.19
+ ac_ct_CC = gcc
+ am__include = include
+ am__leading_dot = .
+@@ -235,7 +235,7 @@ host_vendor = pc
+ htmldir = ${docdir}
+ includedir = ${prefix}/include
+ infodir = ${datarootdir}/info
+-install_sh = ${SHELL} /home/dormando/d/p/danga/git/memcached/install-sh
++install_sh = ${SHELL} /home/oslab/sjoon/workspace/git/rsdco/experiments/memcached-1.5.19/install-sh
+ libdir = ${exec_prefix}/lib
+ libexecdir = ${exec_prefix}/libexec
+ localedir = ${datarootdir}/locale
+@@ -500,16 +500,16 @@ uninstall-man: uninstall-man1
+ 
+ 
+ protocol-binary.txt: protocol-binary.full
+-	no -c /home/dormando/d/p/danga/git/memcached/doc protocol-binary.full $@
++	no -c /home/oslab/sjoon/workspace/git/rsdco/experiments/memcached-1.5.19/doc protocol-binary.full $@
+ 
+ protocol-binary-range.txt: protocol-binary-range.full
+-	no -c /home/dormando/d/p/danga/git/memcached/doc protocol-binary-range.full $@
++	no -c /home/oslab/sjoon/workspace/git/rsdco/experiments/memcached-1.5.19/doc protocol-binary-range.full $@
+ 
+ protocol-binary.full: protocol-binary.xml xml2rfc/rfc2629-noinc.xsl
+-	no --nonet xml2rfc/rfc2629-noinc.xsl protocol-binary.xml > $@
++	/usr/bin/xsltproc --nonet xml2rfc/rfc2629-noinc.xsl protocol-binary.xml > $@
+ 
+ protocol-binary-range.full: protocol-binary-range.xml xml2rfc/rfc2629-noinc.xsl
+-	no --nonet xml2rfc/rfc2629-noinc.xsl protocol-binary-range.xml > $@
++	/usr/bin/xsltproc --nonet xml2rfc/rfc2629-noinc.xsl protocol-binary-range.xml > $@
+ 
+ # Tell versions [3.59,3.63) of GNU make to not export all variables.
+ # Otherwise a system limit (for SysV at least) may be exceeded.
+diff --git a/memcached.c b/memcached.c
+index 2f984bc..fbca93e 100644
+--- a/memcached.c
++++ b/memcached.c
+@@ -29,6 +29,12 @@
+ #include <ctype.h>
+ #include <stdarg.h>
+ 
++#include "../../src/includes/rsdco.h"
++
++void rsdco_memc_replay(void*, uint16_t);
++void rsdco_connset_essential(conn*);
++void rsdco_connfree_essential(conn*);
++
+ /* some POSIX systems need the following definition
+  * to get mlockall flags out of sys/mman.h.  */
+ #ifndef _P1003_1B_VISIBLE
+@@ -5793,10 +5799,24 @@ static void process_command(conn *c, char *command) {
+                 (strcmp(tokens[COMMAND_TOKEN].value, "prepend") == 0 && (comm = NREAD_PREPEND)) ||
+                 (strcmp(tokens[COMMAND_TOKEN].value, "append") == 0 && (comm = NREAD_APPEND)) )) {
+ 
++        size_t memsz = strlen(command) + 1;
++        rsdco_add_request(
++            command, memsz,
++            tokens[KEY_TOKEN].value, tokens[KEY_TOKEN].length, 0,
++            rsdco_rule_balanced
++        );
++
+         process_update_command(c, tokens, ntokens, comm, false);
+ 
+     } else if ((ntokens == 7 || ntokens == 8) && (strcmp(tokens[COMMAND_TOKEN].value, "cas") == 0 && (comm = NREAD_CAS))) {
+ 
++        size_t memsz = strlen(command) + 1;
++        rsdco_add_request(
++            command, memsz,
++            tokens[KEY_TOKEN].value, tokens[KEY_TOKEN].length, 0,
++            rsdco_rule_balanced
++        );
++
+         process_update_command(c, tokens, ntokens, comm, true);
+ 
+     } else if ((ntokens == 4 || ntokens == 5) && (strcmp(tokens[COMMAND_TOKEN].value, "incr") == 0)) {
+@@ -7796,6 +7816,9 @@ static void remove_pidfile(const char *pid_file) {
+ 
+ static void sig_handler(const int sig) {
+     printf("Signal handled: %s.\n", strsignal(sig));
++
++    rsdco_dump_timestamps();
++
+     exit(EXIT_SUCCESS);
+ }
+ 
+@@ -8441,6 +8464,15 @@ int main (int argc, char **argv) {
+     ext_cf.wbuf_count = ext_cf.page_buckets;
+ #endif
+ 
++    rsdco_connector_init();
++    rsdco_local_hotel_init();
++
++    rsdco_remote_writer_hotel_init();
++    rsdco_remote_receiver_hotel_init();
++
++    rsdco_spawn_receiver(rsdco_memc_replay);
++
++
+     /* Run regardless of initializing it later */
+     init_lru_maintainer();
+ 
+@@ -9793,3 +9825,92 @@ int main (int argc, char **argv) {
+ 
+     return retval;
+ }
++
++void rsdco_connset_essential(conn* c) {
++
++    memset(c, 0, sizeof(struct conn)); // Make it all zeros.
++
++    c->rsize = DATA_BUFFER_SIZE;
++    c->wsize = DATA_BUFFER_SIZE;
++    c->isize = ITEM_LIST_INITIAL;
++    c->suffixsize = SUFFIX_LIST_INITIAL;
++    c->iovsize = IOV_LIST_INITIAL;
++    c->msgsize = MSG_LIST_INITIAL;
++
++    c->rbuf = (char *)malloc((size_t)c->rsize);
++    c->wbuf = (char *)malloc((size_t)c->wsize);
++    c->ilist = (item **)malloc(sizeof(item *) * c->isize);
++    c->suffixlist = (char **)malloc(sizeof(char *) * c->suffixsize);
++    c->iov = (struct iovec *)malloc(sizeof(struct iovec) * c->iovsize);
++    c->msglist = (struct msghdr *)malloc(sizeof(struct msghdr) * c->msgsize);
++
++    c->icurr = c->ilist;
++    c->suffixcurr = c->suffixlist;
++}
++
++void rsdco_connfree_essential(conn* c) {
++    free(c->rbuf);
++    free(c->wbuf);
++    free(c->ilist);
++    free(c->suffixlist);
++    free(c->iov);
++    free(c->msglist);
++}
++
++void rsdco_memc_replay(void* buf, uint16_t bufsz) {
++
++    conn c;
++    rsdco_connset_essential(&c);
++
++    token_t tokens[MAX_TOKENS];
++    size_t ntokens = 0;
++    int comm;
++
++    char* command = (char*)buf;
++    char *start, *end;
++    
++    //
++    // Already tokenized, thus record it by '\0'.
++    {
++        start = end = command;
++        for (int i = 0; i < bufsz; i++) {
++            if (*end == '\0') {
++                if (start != end) {
++                    tokens[ntokens].value = start;
++                    tokens[ntokens].length = end - start;
++                    ntokens++;
++                    if (ntokens == MAX_TOKENS - 1) {
++                        end++;
++                        start = end;
++                        break;
++                    }
++                }
++                start = end + 1;
++            }
++            end++;
++        }
++
++        if (start != end) {
++            tokens[ntokens].value = start;
++            tokens[ntokens].length = end - start;
++            ntokens++;
++        }
++
++        tokens[ntokens].value =  *end == '\0' ? NULL : end;
++        tokens[ntokens].length = 0;
++        ntokens++;
++    }
++
++    // Execute
++    if ((ntokens == 6 || ntokens == 7) &&
++        ((strcmp(tokens[COMMAND_TOKEN].value, "add") == 0 && (comm = NREAD_ADD)) ||
++        (strcmp(tokens[COMMAND_TOKEN].value, "set") == 0 && (comm = NREAD_SET)) ||
++        (strcmp(tokens[COMMAND_TOKEN].value, "replace") == 0 && (comm = NREAD_REPLACE)) ||
++        (strcmp(tokens[COMMAND_TOKEN].value, "prepend") == 0 && (comm = NREAD_PREPEND)) ||
++        (strcmp(tokens[COMMAND_TOKEN].value, "append") == 0 && (comm = NREAD_APPEND)) )) {
++
++        process_update_command(&c, tokens, ntokens, comm, false);
++    }
++
++    rsdco_connfree_essential(&c);
++}
