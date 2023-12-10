@@ -35,12 +35,15 @@ namespace scot {
         uint32_t next_free;
         struct ScotAlignedLog* log;
 
+        uint8_t instn;
+
     public:
         ScotLog(uint8_t*);
         ScotLog(struct ScotAlignedLog*);
         ~ScotLog() = default;
 
         uint32_t next_aligned(uint32_t, uint16_t);
+        SCOT_LOGALIGN_T* write_local_log(struct ScotSlotEntry*);
     };
 
 

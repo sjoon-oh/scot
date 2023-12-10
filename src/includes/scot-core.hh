@@ -4,10 +4,11 @@
 #include <string>
 #include <vector>
 #include <atomic>
+#include <thread>
 
 #include "./scot-def.hh"
-#include "./scot-log.hh"
 #include "./scot-slot.hh"
+#include "./scot-log.hh"
 #include "./scot-conn.hh"
 
 #include "./lfmap.hh"
@@ -37,24 +38,20 @@ namespace scot {
 #define __START_WRITE__     while (writer_lock.test_and_set(std::memory_order_acquire)) {
 #define __END_WRITE__       writer_lock.clear(std::memory_order_release); }
 
-
-
     public:
         ScotWriter(struct ScotAlignedLog*);
         ~ScotWriter() = default;
-
-        virtual bool write_request(uint8_t*, uint16_t, uint8_t*, uint16_t, uint32_t) = 0;
     };
 
 
     class ScotReader {
     protected:
         ScotLog log;
+        std::thread worker;
 
     public:
         ScotReader(struct ScotAlignedLog*);
         ~ScotReader() = default;
-
     };
 
 
@@ -70,32 +67,36 @@ namespace scot {
         ScotReplicator(struct ScotAlignedLog*);
         virtual ~ScotReplicator() = default;
 
+        bool write_request(uint8_t*, uint16_t, uint8_t*, uint16_t, uint32_t, uint8_t);
+    };
+
+
+    class ScotReplayer final : public ScotReader {
+    private:
+    public:
+        ScotReplayer(struct ScotAlignedLog*);
+        ~ScotReplayer();
+    };
+
+
+    class ScotCore final {
+    private:
+        
+        ScotReplicator* rpli = nullptr;
+        ScotReplayer** rply = nullptr;  // Multiple Readers
+
         
 
-        virtual bool write_request(uint8_t*, uint16_t, uint8_t*, uint16_t, uint32_t, uint8_t);
-    };
-
-
-    class ScotReplayer : ScotReader {
-
-    };
-
-
-    class ScotCore {
-    private:
-        ScotReplicator* rpli = nullptr;
-        ScotReplayer* rply = nullptr;
 
     public:
         ScotCore();
-        ~ScotCore() = default;
+        ~ScotCore();
 
         void initialize();
         void finish();
 
-        static ScotCore& get_instance() {
-            static ScotCore core;
-            return core;
-        }
+        // Interface
+        int propose(uint8_t*, uint16_t, uint8_t*, uint16_t, uint32_t, uint8_t);
+
     };
 }

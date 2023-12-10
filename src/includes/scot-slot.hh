@@ -58,8 +58,6 @@ namespace scot {
         void __wait_until_reset_finish();
 
         uint32_t __get_next_slot();
-
-        // void __try_register_entry(struct ScotSlotEntryArgs);
         
 
     public:

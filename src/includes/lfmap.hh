@@ -11,8 +11,9 @@
 
 #include <cstdint>
 
-#include "./scot-log.hh"
 #include "./scot-slot.hh"
+#include "./scot-log.hh"
+
 
 //
 // Basic building blocks.

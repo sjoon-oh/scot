@@ -60,7 +60,8 @@ scot::ScotReplicator::ScotReplicator(struct ScotAlignedLog* addr)
 }
 
 bool scot::ScotReplicator::write_request(
-    uint8_t* buf, uint16_t buf_sz, uint8_t* key, uint16_t key_sz, 
+    uint8_t* buf, uint16_t buf_sz, 
+    uint8_t* key, uint16_t key_sz, 
     uint32_t hashv, uint8_t msg) {
 
     uint32_t index = slot.register_entry(
@@ -83,21 +84,17 @@ bool scot::ScotReplicator::write_request(
 
         latest = __ht_get_latest_entry(curr);
 
-
-        // Write to the local log here.
+        SCOT_LOGALIGN_T* log_pos = log.write_local_log(latest); // Write to the local log here.        
+        size_t log_sz = sizeof(struct ScotMessageHeader) + latest->buffer_sz + sizeof(uint8_t);
 
         for (auto& ctx: ScotConnection::get_instance().get_quorum()) {
-            // hartebeest_rdma_post_single_fast(
-                
-            //     ctx.local.rpli_qp, 
 
+            hartebeest_rdma_post_single_fast(
+                ctx.local.rpli_qp, 
+                log_pos, ctx.remote.rply_mr->addr, log_sz, IBV_WR_RDMA_WRITE,
+                ctx.remote.rply_mr->lkey, ctx.remote.rply_mr->rkey, 0);
 
-            //     ctx.remote.rply_mr->addr
-
-
-
-            //     // ctx.local_qp, header, remote_header, write_sz, IBV_WR_RDMA_WRITE, rsdco_rpli_mr->lkey, ctx.remote_mr->rkey, 0
-            // );
+            hartebeest_rdma_send_poll(ctx.local.rpli_qp);
         }
 
         slot.mark_entry_finished(index, latest);
@@ -110,7 +107,36 @@ bool scot::ScotReplicator::write_request(
 
 scot::ScotCore::ScotCore() {
     ScotConnection::get_instance().start();
+
+    int qsize = ScotConnection::get_instance().get_quorum_sz();
+
+    rpli = new ScotReplicator(
+        reinterpret_cast<struct ScotAlignedLog*>(
+            hartebeest_get_local_mr(
+                HBKEY_PD, wkey_helper(HBKEY_MR_RPLI).c_str())->addr)
+    );
+
+
 }
+
+scot::ScotCore::~ScotCore() {
+    if (rpli != nullptr) delete rpli;
+}
+
+
+int scot::ScotCore::propose(
+    uint8_t* buf, uint16_t buf_sz, uint8_t* key, uint16_t key_sz, 
+    uint32_t hashv, uint8_t msg) {
+
+    // Any rules.
+
+    rpli->write_request(
+        buf, buf_sz, key, key_sz, hashv, msg
+    );
+    
+
+
+};
 
 
 void scot::ScotCore::initialize() { };

@@ -32,7 +32,7 @@
 #define SCOT_BUFFER_SZ          2147483647
 #define SCOT_BUFFER_ALIGNS      (SCOT_BUFFER_SZ >> 5)
 
-#define SCOT_LOGALIGN_T         int32_t
+#define SCOT_LOGALIGN_T         uint32_t
 #define SCOT_LOGHEADER_RESERVED 4
 
 // SCOT slots
