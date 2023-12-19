@@ -4,6 +4,7 @@
 #include <iostream>
 #include <vector>
 
+#include <utility>
 
 #include "../extern/nlohmann/json.hpp"
 #include "../hartebeest/src/includes/hartebeest-c.h"
@@ -105,22 +106,60 @@ bool scot::ScotReplicator::write_request(
 }
 
 
+scot::ScotReplayer::ScotReplayer(struct ScotAlignedLog* addr) : ScotReader(addr) { 
+
+}
+
+
+void scot::ScotReplayer::spawn_worker(SCOT_REPLAYER_WORKER_T routine) {
+
+    struct ScotLog* log_inst = &log;
+
+    std::thread _worker(routine, log_inst);
+    _worker.detach();
+
+    worker = std::move(_worker);
+}
+
+
 scot::ScotCore::ScotCore() {
+
+    // Initialize connection
     ScotConnection::get_instance().start();
 
-    int qsize = ScotConnection::get_instance().get_quorum_sz();
+    int nid = ScotConnection::get_instance().get_my_nid();
+    // int qsize = ScotConnection::get_instance().get_quorum_sz();
 
     rpli = new ScotReplicator(
-        reinterpret_cast<struct ScotAlignedLog*>(
-            hartebeest_get_local_mr(
-                HBKEY_PD, wkey_helper(HBKEY_MR_RPLI).c_str())->addr)
+            reinterpret_cast<struct ScotAlignedLog*>(
+                hartebeest_get_local_mr(
+                    HBKEY_PD, wkey_helper(HBKEY_MR_RPLI).c_str())->addr)
     );
+
+    // vec_rply.resize(qsize, nullptr);
+    for (auto& ctx: ScotConnection::get_instance().get_quorum()) {
+        vec_rply.push_back(
+            new ScotReplayer(
+                reinterpret_cast<struct ScotAlignedLog*>(
+                    hartebeest_get_local_mr(
+                        HBKEY_PD, rkey_helper(HBKEY_MR_RPLY, nid, ctx.nid).c_str())->addr)
+            )
+        );
+    }
+
+
+
+
+
+
 
 
 }
 
 scot::ScotCore::~ScotCore() {
     if (rpli != nullptr) delete rpli;
+    for (auto& rply: vec_rply) 
+        if (rply != nullptr) delete rply;
 }
 
 
@@ -128,14 +167,17 @@ int scot::ScotCore::propose(
     uint8_t* buf, uint16_t buf_sz, uint8_t* key, uint16_t key_sz, 
     uint32_t hashv, uint8_t msg) {
 
+    std::cout << "Propose. \n";
+
     // Any rules.
 
     rpli->write_request(
         buf, buf_sz, key, key_sz, hashv, msg
     );
     
+    std::cout << "Propose end. \n";
 
-
+    return 0;
 };
 
 

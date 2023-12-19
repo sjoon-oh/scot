@@ -6,10 +6,14 @@
 #include <atomic>
 #include <thread>
 
+#include <memory>
+
 #include "./scot-def.hh"
 #include "./scot-slot.hh"
 #include "./scot-log.hh"
 #include "./scot-conn.hh"
+
+#include "./scot-worker.hh"
 
 #include "./lfmap.hh"
 
@@ -73,17 +77,19 @@ namespace scot {
 
     class ScotReplayer final : public ScotReader {
     private:
+
     public:
         ScotReplayer(struct ScotAlignedLog*);
-        ~ScotReplayer();
+        ~ScotReplayer() = default;
+
+        void spawn_worker(SCOT_REPLAYER_WORKER_T);
     };
 
 
     class ScotCore final {
     private:
-        
         ScotReplicator* rpli = nullptr;
-        ScotReplayer** rply = nullptr;  // Multiple Readers
+        std::vector<ScotReplayer*> vec_rply;  // Multiple Readers
 
         
 
