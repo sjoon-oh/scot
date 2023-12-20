@@ -50,3 +50,7 @@
 #define SCOT_HT_SIZE            (1 << 20)
 #define SCOT_HT_NBUCKET         (SCOT_HT_SIZE >> 3)
 
+// Worker Signals
+#define SCOT_WRKR_HALT          0x0000
+#define SCOT_WRKR_RUN           0x0001
+#define SCOT_WRKR_PAUSE         0x0002

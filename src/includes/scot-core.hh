@@ -14,8 +14,11 @@
 #include "./scot-conn.hh"
 
 #include "./scot-worker.hh"
+#include "./scot-mout.hh"
 
 #include "./lfmap.hh"
+
+#define _ON_DEBUG_
 
 namespace scot {
     class ScotConfLoader {
@@ -39,22 +42,23 @@ namespace scot {
 
         std::atomic_flag writer_lock;
 
-#define __START_WRITE__     while (writer_lock.test_and_set(std::memory_order_acquire)) {
-#define __END_WRITE__       writer_lock.clear(std::memory_order_release); }
+#define __START_WRITE__     while (writer_lock.test_and_set(std::memory_order_acquire)) { }
+#define __END_WRITE__       writer_lock.clear(std::memory_order_release); { }
 
     public:
-        ScotWriter(struct ScotAlignedLog*);
+        ScotWriter(SCOT_LOGALIGN_T*);
         ~ScotWriter() = default;
+
+        SCOT_LOGALIGN_T* get_base();
     };
 
 
     class ScotReader {
     protected:
         ScotLog log;
-        std::thread worker;
 
     public:
-        ScotReader(struct ScotAlignedLog*);
+        ScotReader(SCOT_LOGALIGN_T*);
         ~ScotReader() = default;
     };
 
@@ -63,12 +67,15 @@ namespace scot {
     private:
         scot::hash::LockfreeMap hasht;
 
+        MessageOut msg_out;     // Logger
+
         // Interface (in)
         void __ht_try_insert(struct ScotSlotEntry*);
         struct ScotSlotEntry* __ht_get_latest_entry(struct ScotSlotEntry*);
 
+
     public:
-        ScotReplicator(struct ScotAlignedLog*);
+        ScotReplicator(SCOT_LOGALIGN_T*);
         virtual ~ScotReplicator() = default;
 
         bool write_request(uint8_t*, uint16_t, uint8_t*, uint16_t, uint32_t, uint8_t);
@@ -77,21 +84,30 @@ namespace scot {
 
     class ScotReplayer final : public ScotReader {
     private:
+        std::thread worker;
+        uint32_t worker_signal; // Worker thread only reads.
+
+        uint32_t id;
+
+        void __worker(struct ScotLog*, uint32_t);
 
     public:
-        ScotReplayer(struct ScotAlignedLog*);
-        ~ScotReplayer() = default;
+        ScotReplayer(SCOT_LOGALIGN_T*, uint32_t);
+        ~ScotReplayer();
 
-        void spawn_worker(SCOT_REPLAYER_WORKER_T);
+        // void spawn_worker(SCOT_REPLAYER_WORKER_T);
+        void worker_spawn();
+        void worker_signal_toggle(uint32_t);
     };
 
 
     class ScotCore final {
     private:
         ScotReplicator* rpli = nullptr;
-        std::vector<ScotReplayer*> vec_rply;  // Multiple Readers
+        std::vector<ScotReplayer*> vec_rply;    // Multiple Readers
 
-        
+        MessageOut msg_out;                     // Logger
+
 
 
     public:

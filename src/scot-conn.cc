@@ -48,13 +48,16 @@ void scot::ScotConnection::__init_hartebeest() {
     // Initialize Writers MR
     hartebeest_create_local_mr(
         HBKEY_PD, wkey_helper(rpli_ks[KEY_MR]).c_str(), SCOT_BUFFER_SZ,
-        IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_READ | IBV_ACCESS_REMOTE_WRITE
+        0 | IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_READ | IBV_ACCESS_REMOTE_WRITE
     );
 
     hartebeest_create_local_mr(
         HBKEY_PD, wkey_helper(chkr_ks[KEY_MR]).c_str(), SCOT_BUFFER_SZ,
-        IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_READ | IBV_ACCESS_REMOTE_WRITE
+        0 | IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_READ | IBV_ACCESS_REMOTE_WRITE
     );
+
+    struct ibv_mr* rpli_mr = hartebeest_get_local_mr(HBKEY_PD, wkey_helper(rpli_ks[KEY_MR]).c_str());
+    struct ibv_mr* chkr_mr = hartebeest_get_local_mr(HBKEY_PD, wkey_helper(chkr_ks[KEY_MR]).c_str());
 
     for (auto& ctx: quroum_conns) {
     
@@ -83,6 +86,9 @@ void scot::ScotConnection::__init_hartebeest() {
         ctx.local.rpli_qp = hartebeest_get_local_qp(HBKEY_PD, __KEY_QP__(rpli_ks, wkey_helper));
         ctx.local.chkr_qp = hartebeest_get_local_qp(HBKEY_PD, __KEY_QP__(chkr_ks, wkey_helper));
 
+        ctx.local.rpli_mr = rpli_mr;
+        ctx.local.chkr_mr = chkr_mr;
+
         bool is_pushed = hartebeest_memc_push_local_qp(
             __KEY_QP__(rpli_ks, wkey_helper), HBKEY_PD, __KEY_QP__(rpli_ks, wkey_helper));
         assert(is_pushed == true);
@@ -102,11 +108,11 @@ void scot::ScotConnection::__init_hartebeest() {
 
         hartebeest_create_local_mr(
             HBKEY_PD, __KEY_MR__(rply_ks, rkey_helper), SCOT_BUFFER_SZ,
-            IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_READ | IBV_ACCESS_REMOTE_WRITE
+            0 | IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_READ | IBV_ACCESS_REMOTE_WRITE
         );
         hartebeest_create_local_mr(
             HBKEY_PD, __KEY_MR__(rcvr_ks, rkey_helper), SCOT_BUFFER_SZ,
-            IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_READ | IBV_ACCESS_REMOTE_WRITE
+            0 | IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_READ | IBV_ACCESS_REMOTE_WRITE
         );
 
         hartebeest_create_local_qp(
@@ -170,7 +176,7 @@ void scot::ScotConnection::__connect_qps() {
 
         hartebeest_memc_fetch_remote_mr(__KEY_MR__(rcvr_ks, wkey_helper));  // Me writing to Remote.
         hartebeest_memc_fetch_remote_qp(__KEY_QP__(rcvr_ks, wkey_helper));  // Me writing to Remote.
-        ctx.remote.rply_mr = hartebeest_get_remote_mr(__KEY_MR__(rcvr_ks, wkey_helper));
+        ctx.remote.rcvr_mr = hartebeest_get_remote_mr(__KEY_MR__(rcvr_ks, wkey_helper));
         
         hartebeest_connect_local_qp(
             HBKEY_PD, 

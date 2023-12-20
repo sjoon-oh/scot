@@ -5,6 +5,6 @@
 <!-- github.com/sjoon-oh/scot
 Author: Sukjoon Oh, sjoon@kaist.ac.kr -->
 
-The Static Dependency-check Offloading Replication Technique (**SCOT**)
+The Simple Dependency-check Offloading Replication Technique (**SCOT**)
 
 

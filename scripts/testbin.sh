@@ -21,14 +21,14 @@ workspace_home=`pwd`
 export HARTEBEEST_PARTICIPANTS=0,1,2
 # export HARTEBEEST_EXC_IP_PORT=143.248.39.61:9999
 
-export HARTEBEEST_EXC_IP_PORT=143.248.231.40:9999
+export HARTEBEEST_EXC_IP_PORT=143.248.39.169:9999
 export HARTEBEEST_CONF_PATH=${workspace_home}/config/qp.conf
 
 export SCOT_QSIZE=3
 
 if [ "${HARTEBEEST_NID}" == "0" ]; then
     printf "${normalc}Starting Memcached at blanc...\n"
-    ssh oslab@143.248.231.40 "memcached -p 9999 &" &
+    ssh oslab@143.248.39.169 "memcached -p 9999 &" &
 else
     usleep 300
 fi
@@ -38,6 +38,6 @@ numactl --membind 0 ./build/bin/scot-testbin
 if [ "${HARTEBEEST_NID}" == "0" ]; then
     printf "${normalc}Killing Memcached at blanc...\n"
     sleep 5
-    ssh oslab@143.248.231.40 "pkill -9 memcached"
+    ssh oslab@143.248.39.169 "pkill -9 memcached"
 fi
 

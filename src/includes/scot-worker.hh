@@ -1,10 +1,10 @@
-
+#pragma once
 
 #include <cstdint>
 
-namespace scot {
+#include "./scot-log.hh"
 
-    void worker_replayer(uint8_t*);
-}
+typedef     void (*SCOT_REPLAYER_WORKER_T)(struct scot::ScotLog*);
 
-typedef     void (*SCOT_REPLAYER_WORKER_T)(uint8_t*);
+
+

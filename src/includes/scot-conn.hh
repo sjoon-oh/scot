@@ -12,13 +12,15 @@ namespace scot {
         struct  {
             struct ibv_qp* rpli_qp;     // Local connected QP
             struct ibv_qp* chkr_qp;     // Local connected QP
+            struct ibv_mr* rpli_mr;
+            struct ibv_mr* chkr_mr;
         } local;
         struct {
             struct ibv_mr* rply_mr;     // Local connected QP
             struct ibv_mr* rcvr_mr;     // Local connected QP
         } remote;
         ConnContext(int nid) : nid(nid) { 
-            local = {nullptr, nullptr};
+            local = {nullptr, nullptr, nullptr, nullptr};
             remote = {nullptr, nullptr};
         }
     };

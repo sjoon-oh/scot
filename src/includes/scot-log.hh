@@ -33,21 +33,28 @@ namespace scot {
     class ScotLog {
     private:
         uint32_t next_free;
-        struct ScotAlignedLog* log;
+        SCOT_LOGALIGN_T* log;
 
         uint8_t instn;
 
+        uint32_t __get_next_aligned_idx(uint32_t, uint16_t);
+
     public:
         ScotLog(uint8_t*);
-        ScotLog(struct ScotAlignedLog*);
+        ScotLog(SCOT_LOGALIGN_T*);
         ~ScotLog() = default;
 
-        uint32_t next_aligned(uint32_t, uint16_t);
         SCOT_LOGALIGN_T* write_local_log(struct ScotSlotEntry*);
+        SCOT_LOGALIGN_T* poll_next_local_log(uint8_t);
+
+        SCOT_LOGALIGN_T* get_base();
+        SCOT_LOGALIGN_T* get_next_aligned_addr();
+
+        uint8_t get_instn();
     };
-
-
 }
+
+#define LOG_WRAPPER_INSTANCE(LOG)       (*(reinterpret_cast<struct ScotAlignedLog*>(LOG)))
 
 
 
