@@ -51,6 +51,7 @@ namespace scot {
         SCOT_LOGALIGN_T* get_next_aligned_addr();
 
         uint8_t get_instn();
+        uint32_t get_next_free();
     };
 }
 

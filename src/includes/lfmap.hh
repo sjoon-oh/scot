@@ -39,14 +39,20 @@
 
 
 typedef int32_t (*compfunc_t) (void *, void *);
+#ifdef __cplusplus
+extern "C" {
+#endif
+    struct __attribute__((packed)) Cell {
+        struct ScotSlotEntry* next; 
+    };
 
-struct __attribute__((packed)) Cell {
-    struct ScotSlotEntry* next; 
-};
+    struct __attribute__((packed)) List {
+        struct ScotSlotEntry head;
+    };
 
-struct __attribute__((packed)) List {
-    struct ScotSlotEntry head;
-};
+#ifdef __cplusplus
+}
+#endif
 
 
 //

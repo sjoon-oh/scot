@@ -57,3 +57,7 @@
 #define SCOT_WRKR_HALT          0x0000
 #define SCOT_WRKR_RUN           0x0001
 #define SCOT_WRKR_PAUSE         0x0002
+
+#define SCOT_SLOT_RESET         1
+
+#define SCOT_TIMESTAMP_RECORDS  10000000

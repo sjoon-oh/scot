@@ -46,5 +46,17 @@ set_target_properties(
 )
 target_link_libraries(${scot_testbin} PUBLIC ${scotlib} hartebeest)
 
+# Multi-threded test binary
+set(scot_mt_testbin scot-mt-testbin)
+add_executable(
+    ${scot_mt_testbin}
+    ${PROJECT_SOURCE_DIR}/src/tests/mt-test.cc
+)
+set_target_properties(
+    ${scot_mt_testbin} 
+    PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/build/bin
+)
+target_link_libraries(${scot_mt_testbin} PUBLIC ${scotlib} hartebeest)
+
 
 

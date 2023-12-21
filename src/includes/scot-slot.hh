@@ -10,41 +10,47 @@
 
 #include "./scot-def.hh"
 
+
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-struct ScotSlotEntry {
-    struct ScotSlotEntry* next;
-    uint32_t hashv;
+    struct ScotSlotEntry {
+        struct ScotSlotEntry* next;
+        uint32_t hashv;
 
-    uint8_t ready;
-    uint8_t blocked;
+        uint8_t ready;
+        uint8_t blocked;
 
-    uint8_t* buffer;
-    uint16_t buffer_sz;
+        uint8_t* buffer;
+        uint16_t buffer_sz;
 
-    uint8_t* key;
-    uint16_t key_sz;
+        uint8_t* key;
+        uint16_t key_sz;
 
-    uint8_t msg;
-};
+        uint8_t msg;
+    };
 
-// Minimum
-struct ScotSlotEntryArgs {
-    uint32_t hashv;
-    uint8_t* buffer;
-    uint16_t buffer_sz;
-    uint8_t* key;
-    uint16_t key_sz;
-    uint8_t msg;
-};
+    // Minimum
+    struct ScotSlotEntryArgs {
+        uint32_t hashv;
+        uint8_t* buffer;
+        uint16_t buffer_sz;
+        uint8_t* key;
+        uint16_t key_sz;
+        uint8_t msg;
+    };
 
 #ifdef __cplusplus
 }
 #endif
 
 namespace scot {
+
+    namespace hash {
+        class LockfreeMap;
+    }
+
     class ScotSlot {
     private:
 
@@ -65,10 +71,12 @@ namespace scot {
         ~ScotSlot() = default;
 
         uint32_t register_entry(struct ScotSlotEntryArgs);
-        // void mark_entry_finished(uint32_t);
-        void mark_entry_finished(uint32_t index, struct ScotSlotEntry*);
+        int mark_entry_finished(uint32_t index, struct ScotSlotEntry*, hash::LockfreeMap* = nullptr);
 
         struct ScotSlotEntry* get_slot_entry(uint32_t);
         struct ScotSlotEntry* get_next_unfinished();
+
+        uint32_t peek_processed();
+        uint32_t peek_next_free();
     };
 }

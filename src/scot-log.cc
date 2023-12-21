@@ -124,6 +124,7 @@ SCOT_LOGALIGN_T* scot::ScotLog::poll_next_local_log(uint8_t msg_detect) {
 
     }
 
+    cur_align_index += 2;
     pld_pos += uintptr_t(sizeof(struct ScotMessageHeader));
 
 #ifdef _ON_DEBUG_X
@@ -169,4 +170,9 @@ SCOT_LOGALIGN_T* scot::ScotLog::get_next_aligned_addr() {
 
 uint8_t scot::ScotLog::get_instn() {
     return instn;
+}
+
+
+uint32_t scot::ScotLog::get_next_free() {
+    return next_free;
 }

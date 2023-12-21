@@ -3,12 +3,15 @@
 #include <memory>
 #include <atomic>
 
+#include <iostream>
+
 #include <cstring>
 
 #include <assert.h>
 #include <stdlib.h>
 
 #include "./includes/scot-slot.hh"
+#include "./includes/lfmap.hh"
 
 scot::ScotSlot::ScotSlot() {
  
@@ -20,13 +23,15 @@ scot::ScotSlot::ScotSlot() {
 
 
 void scot::ScotSlot::__wait_until_proc_finish() {
-    while (processed.load() != SCOT_SLOT_COUNTS)
+    uint32_t procd;
+    while ((procd = processed.load()) != SCOT_SLOT_COUNTS)
         ;
 }
 
 
 void scot::ScotSlot::__wait_until_reset_finish() {
-    while (next_free.load() < SCOT_SLOT_COUNTS)
+    uint32_t nf;
+    while (!((nf = next_free.load()) < SCOT_SLOT_COUNTS))
         ;
 }
 
@@ -60,28 +65,32 @@ uint32_t scot::ScotSlot::register_entry(struct ScotSlotEntryArgs sa) {
 }
 
 
-void scot::ScotSlot::mark_entry_finished(uint32_t index, struct ScotSlotEntry* procd_entry) {
+int scot::ScotSlot::mark_entry_finished(
+        uint32_t index, struct ScotSlotEntry* procd_entry, 
+        hash::LockfreeMap* ht
+    ) {
     
     uint32_t proc = processed.fetch_add(1); // Record currently processed slot number
     procd_entry->ready = 0;  
 
     // If last index, reset all slots.
     if (index == (SCOT_SLOT_COUNTS - 1)) {
-        
+
         __wait_until_proc_finish();
 
-        processed.store(0);
+        if (ht != nullptr)
+            ht->reset();
+
         std::memset(&slot, 0, sizeof(struct ScotSlotEntry) * SCOT_SLOT_COUNTS);
 
         next_free.store(0);
+        processed.store(0);
+
+        return SCOT_SLOT_RESET;
     }
+
+    return 0;
 }
-
-
-// Try Lock
-// while (slot_reset_lock.test_and_set(std::memory_order_acquire)) {
-//     slot_reset_lock.clear(std::memory_order_release); // Release
-// }
 
 
 struct ScotSlotEntry* scot::ScotSlot::get_slot_entry(uint32_t index) {
@@ -93,4 +102,14 @@ struct ScotSlotEntry* scot::ScotSlot::get_next_unfinished() {
 
     uint32_t next = processed.fetch_add(1);
     return &slot[next];
+}
+
+
+uint32_t scot::ScotSlot::peek_next_free() {
+    return next_free.load();
+}
+
+
+uint32_t scot::ScotSlot::peek_processed() {
+    return processed.load();
 }

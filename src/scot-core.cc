@@ -101,6 +101,8 @@ bool scot::ScotReplicator::write_request(
         size_t offset = uintptr_t(header) - uintptr_t(log.get_base());
         SCOT_LOGALIGN_T* remote_target_addr;
 
+        bool ret = 0;
+
 #ifdef _ON_DEBUG_X
         struct ScotMessageHeader* local_header = 
             reinterpret_cast<struct ScotMessageHeader*>(header);
@@ -128,7 +130,7 @@ bool scot::ScotReplicator::write_request(
                 reinterpret_cast<SCOT_LOGALIGN_T*>(
                         uintptr_t(ctx.remote.rply_mr->addr) + offset);
 
-            bool ret = hartebeest_rdma_post_single_fast(
+            ret = hartebeest_rdma_post_single_fast(
                 ctx.local.rpli_qp,          // Local QP
                 header,                     // Local starting point of a RDMA message
                 remote_target_addr,         // To where at remote?
@@ -146,12 +148,27 @@ bool scot::ScotReplicator::write_request(
         //
         // Wait for else.
         for (auto& ctx: ScotConnection::get_instance().get_quorum()) {
-            hartebeest_rdma_send_poll(ctx.local.rpli_qp);
+            ret = hartebeest_rdma_send_poll(ctx.local.rpli_qp);
+
+#ifdef _ON_DEBUG_
+            if (!ret) {
+                __SCOT_INFO__(msg_out, "→→ Polling error.");
+                assert(0);
+            }
+#endif
         }
 
-        slot.mark_entry_finished(index, latest);
+#ifdef _ON_DEBUG_X
+        __SCOT_INFO__(msg_out, "→→ write_request end: {}", index);
+#endif
 
     } __END_WRITE__
+
+    if (slot.mark_entry_finished(index, latest, &hasht) == SCOT_SLOT_RESET) { // Reset comes here.
+#ifdef _ON_DEBUG_X
+        __SCOT_INFO__(msg_out, "→→ Slot/hasht reset triggered");
+#endif
+    }
     
     return 0;
 }
@@ -188,8 +205,6 @@ void scot::ScotReplayer::__worker(struct ScotLog* log, uint32_t rply_id) {
 
         // Pause when signaled.
         while (IS_SIGNALED(SCOT_WRKR_PAUSE)) ;
-
-        __SCOT_INFO__(lc_out, "→ Waiting for instance: {}", log->get_instn());
 
         log->poll_next_local_log(SCOT_MSGTYPE_PURE);
 
@@ -266,20 +281,14 @@ scot::ScotCore::~ScotCore() {
 int scot::ScotCore::propose(
     uint8_t* buf, uint16_t buf_sz, uint8_t* key, uint16_t key_sz, 
     uint32_t hashv, uint8_t msg) {
-
-#ifdef _ON_DEBUG_
-    __SCOT_INFO__(msg_out, "→ PROPOSE called.");
-#endif
-
-    // Rules?
+    
+    //
+    //
+    // Rules here?
 
     rpli->write_request(
         buf, buf_sz, key, key_sz, hashv, msg
     );
-
-#ifdef _ON_DEBUG_
-    __SCOT_INFO__(msg_out, "→ PROPOSE finished.");
-#endif
 
     return 0;
 };

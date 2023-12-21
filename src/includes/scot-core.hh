@@ -18,6 +18,8 @@
 
 #include "./lfmap.hh"
 
+#include "../includes/scot-eval.hh"
+
 namespace scot {
     class ScotConfLoader {
     private:

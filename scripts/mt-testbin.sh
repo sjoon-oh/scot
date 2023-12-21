@@ -37,11 +37,21 @@ else
     usleep 300
 fi
 
-numactl --membind 0 ./build/bin/scot-testbin
+numactl --membind 0 ./build/bin/scot-mt-testbin 16 4 4
 
 if [ "${HARTEBEEST_NID}" == "0" ]; then
     printf "${normalc}Killing Memcached at blanc...\n"
     sleep 5
     ssh oslab@143.248.39.169 "pkill -9 memcached"
 fi
+
+exit
+
+# gdb env: env ~~
+# set environment HARTEBEEST_NID=0
+# set environment HARTEBEEST_PARTICIPANTS=0,1,2
+# set environment HARTEBEEST_EXC_IP_PORT=143.248.39.169:9999
+# set environment HARTEBEEST_CONF_PATH=/home/oslab/sjoon/workspace/sjoon-git/scot/config/qp.conf
+# set environment SCOT_QSIZE=3
+
 
