@@ -95,46 +95,59 @@ bool scot::ScotReplicator::write_request(
         latest = __ht_get_latest_entry(curr);
 
         SCOT_LOGALIGN_T* header = log.write_local_log(latest); // Write to the local log here.        
-        size_t log_sz = sizeof(struct ScotMessageHeader) + latest->buffer_sz + sizeof(uint8_t);
+        size_t log_sz = sizeof(struct ScotMessageHeader) + 
+            static_cast<size_t>(latest->buffer_sz) + sizeof(uint8_t);
 
         size_t offset = uintptr_t(header) - uintptr_t(log.get_base());
         SCOT_LOGALIGN_T* remote_target_addr;
 
 #ifdef _ON_DEBUG_X
-        __SCOT_INFO__(msg_out, "→→ HT Latest: {:x}, Current: {:x}", uintptr_t(latest), uintptr_t(curr));
-        __SCOT_INFO__(msg_out, "→→ Local base: {:x}, offset: {}", uintptr_t(header), offset);
+        struct ScotMessageHeader* local_header = 
+            reinterpret_cast<struct ScotMessageHeader*>(header);
+
+        uint32_t unbind_hashv   = local_header->hashv;
+        uint16_t unbind_bufsz   = local_header->buf_sz;
+        uint8_t unbind_inst     = local_header->inst;
+        uint8_t unbind_msg      = local_header->msg;
+
+        SCOT_LOG_FINEGRAINED_T* local_payload = 
+            (SCOT_LOG_FINEGRAINED_T*)(header) + (sizeof(struct ScotMessageHeader));
+
+        __SCOT_INFO__(
+            msg_out, 
+            "→→ RDMA message local header: \n-- Report --\nhashv({}), buf_sz({}), inst({}), msg({}), total {} bytes\n----", 
+            unbind_hashv, unbind_bufsz, unbind_inst, unbind_msg, log_sz
+        );
 #endif
 
+        // 
+        // Send WR first for all quorums
         for (auto& ctx: ScotConnection::get_instance().get_quorum()) {
             
             remote_target_addr = 
-                reinterpret_cast<SCOT_LOGALIGN_T*>(uintptr_t(ctx.remote.rply_mr->addr) + offset);
-
-#ifdef _ON_DEBUG_X
-            __SCOT_INFO__(msg_out, "→→ RDMA Write to base: {:x}, LK: {:x}, RK: {:x}, target: {:x}", 
-                uintptr_t(ctx.remote.rply_mr->addr), 
-                ctx.remote.rply_mr->lkey, ctx.remote.rply_mr->rkey, 
-                uintptr_t(remote_target_addr));
-#endif
+                reinterpret_cast<SCOT_LOGALIGN_T*>(
+                        uintptr_t(ctx.remote.rply_mr->addr) + offset);
 
             bool ret = hartebeest_rdma_post_single_fast(
-                ctx.local.rpli_qp, 
-                header, 
-                remote_target_addr, 
-                log_sz, 
+                ctx.local.rpli_qp,          // Local QP
+                header,                     // Local starting point of a RDMA message
+                remote_target_addr,         // To where at remote?
+                log_sz,                     // Total message size
                 IBV_WR_RDMA_WRITE,
-                ctx.local.rpli_mr->lkey, 
-                ctx.remote.rply_mr->rkey, 
+                ctx.local.rpli_mr->lkey,    // Local MR acces key
+                ctx.remote.rply_mr->rkey,   // Remote MR access key
                 ctx.nid);
-            
+
+#ifdef _ON_DEBUG_
             assert(ret != false);
+#endif
         }
 
+        //
+        // Wait for else.
         for (auto& ctx: ScotConnection::get_instance().get_quorum()) {
             hartebeest_rdma_send_poll(ctx.local.rpli_qp);
         }
-
-
 
         slot.mark_entry_finished(index, latest);
 

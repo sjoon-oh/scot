@@ -8,6 +8,8 @@
 #include <assert.h>
 #include <stdlib.h>
 
+#include "./includes/scot-def.hh"
+
 #include "./includes/scot-slot.hh"
 #include "./includes/scot-log.hh"
 
@@ -60,8 +62,10 @@ SCOT_LOGALIGN_T* scot::ScotLog::write_local_log(struct ScotSlotEntry* request) {
     // Make message and write to the local log
     uint32_t cur_align_index = next_free;
 
-    SCOT_LOGALIGN_T* log_pos = 
-        &(LOG_WRAPPER_INSTANCE(log).aligned[cur_align_index]);
+    SCOT_LOG_FINEGRAINED_T* log_pos = 
+        reinterpret_cast<SCOT_LOG_FINEGRAINED_T*>(
+            &(LOG_WRAPPER_INSTANCE(log).aligned[cur_align_index])
+        );
 
     //
     // 1. Record the message header
@@ -76,7 +80,11 @@ SCOT_LOGALIGN_T* scot::ScotLog::write_local_log(struct ScotSlotEntry* request) {
 
     // 
     // 2. Record the payload
-    log_pos = &(LOG_WRAPPER_INSTANCE(log).aligned[cur_align_index]);
+
+
+    log_pos = reinterpret_cast<SCOT_LOG_FINEGRAINED_T*>(
+            &(LOG_WRAPPER_INSTANCE(log).aligned[cur_align_index])
+        );
     std::memcpy(log_pos, request->buffer, request->buffer_sz);
 
     log_pos += uintptr_t(request->buffer_sz);
@@ -99,10 +107,13 @@ SCOT_LOGALIGN_T* scot::ScotLog::poll_next_local_log(uint8_t msg_detect) {
 
     uint32_t cur_align_index = next_free;
 
-    SCOT_LOGALIGN_T* log_pos = 
-        &(LOG_WRAPPER_INSTANCE(log).aligned[cur_align_index]);
-    SCOT_LOGALIGN_T* pld_pos = log_pos;
-    SCOT_LOGALIGN_T* cnry_pos = nullptr;
+    SCOT_LOG_FINEGRAINED_T* log_pos = 
+        reinterpret_cast<SCOT_LOG_FINEGRAINED_T*>(
+            &(LOG_WRAPPER_INSTANCE(log).aligned[cur_align_index])
+        );
+        
+    SCOT_LOG_FINEGRAINED_T* pld_pos = log_pos;
+    SCOT_LOG_FINEGRAINED_T* cnry_pos = nullptr;
 
     struct ScotMessageHeader* rcv_header = 
         reinterpret_cast<struct ScotMessageHeader*>(log_pos);
@@ -112,19 +123,26 @@ SCOT_LOGALIGN_T* scot::ScotLog::poll_next_local_log(uint8_t msg_detect) {
     while (rcv_header->msg != msg_detect) {
 
     }
-    
-    rcv_header->msg = 0;
 
     pld_pos += uintptr_t(sizeof(struct ScotMessageHeader));
-    printf("Detected: %s\n", (char*)pld_pos);
+
+#ifdef _ON_DEBUG_X
+    printf("Detected {hashv: %ld, bufsz: %ld, inst: %ld, msg: %ld, payload: %s}.\n", 
+        rcv_header->hashv,
+        rcv_header->buf_sz,
+        rcv_header->inst,
+        rcv_header->msg,
+        (char*)pld_pos
+        );
+#endif
+
+    rcv_header->msg = 0;
 
     // 3. Wait for canary (Validation).
     cnry_pos = pld_pos + uintptr_t(rcv_header->buf_sz);
     while ((*(reinterpret_cast<uint8_t*>(cnry_pos))) != SCOT_LOGENTRY_CANARY) {
 
     }
-
-    printf("Canary detected\n");
 
     *(reinterpret_cast<uint8_t*>(cnry_pos)) = 0; // Reset canary value.
 

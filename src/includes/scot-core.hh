@@ -18,8 +18,6 @@
 
 #include "./lfmap.hh"
 
-#define _ON_DEBUG_
-
 namespace scot {
     class ScotConfLoader {
     private:

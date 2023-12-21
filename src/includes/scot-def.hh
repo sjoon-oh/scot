@@ -1,5 +1,7 @@
 #pragma once
 
+#define _ON_DEBUG_
+
 // Default Envar
 // ID starts with 0, monotonically, at initialization..
 #define SCOT_ENVVAR_NID         "HARTEBEEST_NID"
@@ -33,6 +35,7 @@
 #define SCOT_BUFFER_ALIGNS      (SCOT_BUFFER_SZ >> 5)
 
 #define SCOT_LOGALIGN_T         uint32_t
+#define SCOT_LOG_FINEGRAINED_T  uint8_t
 #define SCOT_LOGHEADER_RESERVED 4
 
 // SCOT slots
