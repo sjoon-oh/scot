@@ -9,6 +9,8 @@
 
 #include "./includes/scot-def.hh"
 #include "./includes/scot-conn.hh"
+#include "./includes/scot-hb.hh"
+
 
 // Keysets
 namespace scot {
@@ -56,8 +58,19 @@ void scot::ScotConnection::__init_hartebeest() {
         0 | IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_READ | IBV_ACCESS_REMOTE_WRITE
     );
 
+    // Heartbeat scoreboard
+    hartebeest_create_local_mr(
+        HBKEY_PD, wkey_helper(HBKEY_MR_HBTR, std::stoi(nid)).c_str(), sizeof(struct ScotScoreboard),
+        0 | IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_READ | IBV_ACCESS_REMOTE_WRITE
+    );
+
+    hartebeest_memc_push_local_mr(
+        wkey_helper(HBKEY_MR_HBTR, std::stoi(nid)).c_str(), 
+        HBKEY_PD, wkey_helper(HBKEY_MR_HBTR, std::stoi(nid)).c_str());
+
     struct ibv_mr* rpli_mr = hartebeest_get_local_mr(HBKEY_PD, wkey_helper(rpli_ks[KEY_MR]).c_str());
     struct ibv_mr* chkr_mr = hartebeest_get_local_mr(HBKEY_PD, wkey_helper(chkr_ks[KEY_MR]).c_str());
+    struct ibv_mr* hbtr_mr = hartebeest_get_local_mr(HBKEY_PD, wkey_helper(HBKEY_MR_HBTR, std::stoi(nid)).c_str());
 
     for (auto& ctx: quroum_conns) {
     
@@ -96,8 +109,6 @@ void scot::ScotConnection::__init_hartebeest() {
         is_pushed = hartebeest_memc_push_local_qp(
             __KEY_QP__(chkr_ks, wkey_helper), HBKEY_PD, __KEY_QP__(chkr_ks, wkey_helper));
         assert(is_pushed == true);
-
-        // std::cout << "------ Writers ok -----\n";
 
         //
         // Start Receiver QP
@@ -139,7 +150,27 @@ void scot::ScotConnection::__init_hartebeest() {
             __KEY_MR__(rcvr_ks, rkey_helper), HBKEY_PD, __KEY_MR__(rcvr_ks, rkey_helper));
         assert(is_pushed == true);
 
-        // std::cout << "------ Readers ok -----\n";
+// Heartbeat-related
+#define __KEY_QP_HB_LOCAL__         (wkey_helper(HBKEY_QP_HBTR, std::stoi(nid), ctx.nid).c_str())
+#define __KEY_QP_HB_REMOTE__        (rkey_helper(HBKEY_QP_HBTR, std::stoi(nid), ctx.nid).c_str())
+#define __KEY_SCQ_HB_LOCAL__        (wkey_helper(HBKEY_SCQ_HBTR, std::stoi(nid), ctx.nid).c_str())
+#define __KEY_RCQ_HB_LOCAL__        (wkey_helper(HBKEY_RCQ_HBTR, std::stoi(nid), ctx.nid).c_str())
+        
+        //
+        // Start Hartbeat QPs
+        hartebeest_create_basiccq(__KEY_SCQ_HB_LOCAL__);
+        hartebeest_create_basiccq(__KEY_RCQ_HB_LOCAL__);
+
+        hartebeest_create_local_qp(
+            HBKEY_PD, __KEY_QP_HB_LOCAL__, IBV_QPT_RC, __KEY_SCQ_HB_LOCAL__, __KEY_RCQ_HB_LOCAL__);
+        
+        hartebeest_init_local_qp(HBKEY_PD, __KEY_QP_HB_LOCAL__);
+        is_pushed = hartebeest_memc_push_local_qp(
+            __KEY_QP_HB_LOCAL__, HBKEY_PD, __KEY_QP_HB_LOCAL__);
+        assert(is_pushed == true);
+
+        ctx.local.hbtr_mr = hbtr_mr;
+        ctx.local.hbtr_qp = hartebeest_get_local_qp(HBKEY_PD, __KEY_QP_HB_LOCAL__);
     } 
 }
 
@@ -198,6 +229,22 @@ void scot::ScotConnection::__connect_qps() {
             __KEY_QP__(rcvr_ks, rkey_helper),
             __KEY_QP__(chkr_ks, rkey_helper)
         );
+
+        // For Hearbeat:
+        hartebeest_memc_fetch_remote_mr(
+            wkey_helper(HBKEY_MR_HBTR, std::stoi(nid)).c_str()
+        );
+        hartebeest_memc_fetch_remote_qp(__KEY_QP_HB_REMOTE__);
+        hartebeest_connect_local_qp(
+            HBKEY_PD, 
+            __KEY_QP_HB_LOCAL__,
+            __KEY_QP_HB_REMOTE__
+        );
+
+        ctx.remote.hbtr_mr = hartebeest_get_remote_mr(
+            wkey_helper(HBKEY_MR_HBTR, std::stoi(nid)).c_str()
+        );
+
     }
 }
 

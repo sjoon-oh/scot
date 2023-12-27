@@ -7,6 +7,8 @@
 #define SCOT_ENVVAR_NID         "HARTEBEEST_NID"
 #define SCOT_ENVVAR_QSZ         "SCOT_QSIZE"
 
+#define SCOT_MAX_QSIZE          9
+
 // Hartebeest Keys
 #define HBKEY_PD                "pd-scot"
 
@@ -14,21 +16,25 @@
 #define HBKEY_MR_CHKR           "mr-chkr"
 #define HBKEY_MR_RPLY           "mr-rply"
 #define HBKEY_MR_RCVR           "mr-rcvr"
+#define HBKEY_MR_HBTR           "mr-hbtr"   // Heartbeat
 
 #define HBKEY_QP_RPLI           "qp-rpli"
 #define HBKEY_QP_CHKR           "qp-chkr"
 #define HBKEY_QP_RPLY           "qp-rply"
 #define HBKEY_QP_RCVR           "qp-rcvr"
+#define HBKEY_QP_HBTR           "qp-hbtr"
 
 #define HBKEY_SCQ_RPLI          "scq-rpli"
 #define HBKEY_SCQ_CHKR          "scq-chkr"
 #define HBKEY_SCQ_RPLY          "scq-rply"
 #define HBKEY_SCQ_RCVR          "scq-rcvr"
+#define HBKEY_SCQ_HBTR          "scq-hbtr"
 
 #define HBKEY_RCQ_RPLI          "rcq-rpli"
 #define HBKEY_RCQ_CHKR          "rcq-chkr"
 #define HBKEY_RCQ_RPLY          "rcq-rply"
 #define HBKEY_RCQ_RCVR          "rcq-rcvr"
+#define HBKEY_RCQ_HBTR          "rcq-hbtr"
 
 // SCOT Log area
 #define SCOT_BUFFER_SZ          2147483647
@@ -61,3 +67,7 @@
 #define SCOT_SLOT_RESET         1
 
 #define SCOT_TIMESTAMP_RECORDS  10000000
+
+// SCOT Heartbeat Scoreboard
+#define SCOT_SCB_FINEGRAINED_T  uint8_t
+#define SCOT_SCB_WIDE_T         uint16_t

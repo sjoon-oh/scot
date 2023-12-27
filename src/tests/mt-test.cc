@@ -11,6 +11,8 @@
 
 #include "../includes/scot-core.hh"
 
+#define REQ_NUM     1000000
+
 void generate_random_str(std::mt19937& generator, char* buffer, int len) {
 
     // Printable ASCII range.
@@ -36,32 +38,36 @@ void worker(int nid, int tid, int gen_sz, int key_sz, scot::ScotCore& core_insta
     std::mt19937 generator;
     std::hash<std::string> hm;
 
+    scot::ScotTimestamp ts(logger_name + ".csv");
+
 
     sleep(3); // Wait for a bit.
 
     if (nid == 0) {
-        for (int i = 0; i < 1000000; i++) {
+        for (int i = 0; i < REQ_NUM; i++) {
 
             // Propose
             generate_random_str(generator, static_buffer, gen_sz);
 
+            uint64_t index = ts.record_start();
             core_instance.propose(
                 (uint8_t*)static_buffer, gen_sz, 
                 (uint8_t*)static_buffer, key_sz, 
                 hm(std::string(static_buffer)), 
                 SCOT_MSGTYPE_PURE
             );
+            ts.record_end(index);
 
             std::memset(static_buffer, 0, 4096);
 
             if (i % 50000 == 0) {
-                float perc = (i * 0.000001) * 100;
+                float perc = (i / REQ_NUM) * 100;
                 m_out.get_logger()->info("PROPOSE: {:03.2f}%", perc);
             }
         }
     }
     else
-        sleep(7);
+        sleep(10);
 
     return;
 }
