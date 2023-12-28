@@ -13,8 +13,8 @@
 #include "./includes/scot-core.hh"
 
 
-scot::ScotReceiver::ScotReceiver(SCOT_LOGALIGN_T* addr, uint32_t rcvr_id) 
-    : ScotReader(addr), worker(), worker_signal(0), id(rcvr_id) { 
+scot::ScotReceiver::ScotReceiver(SCOT_LOGALIGN_T* addr, uint32_t rcvr_id, scot::ScotReplicator* rpli_ack) 
+    : ScotReader(addr), worker(), worker_signal(0), id(rcvr_id), rpli(rpli_ack) { 
 
     worker_signal_toggle(SCOT_WRKR_PAUSE);
 }
@@ -26,7 +26,7 @@ scot::ScotReceiver::~ScotReceiver() {
 
 
 #define IS_SIGNALED(SIGN)   (worker_signal & SIGN)
-void scot::ScotReceiver::__worker(struct ScotLog* log, uint32_t rcvr_id) {
+void scot::ScotReceiver::__worker(struct ScotLog* log, uint32_t rcvr_id, scot::ScotReplicator* rpli) {
 
     std::string lc_name_out("rcvr-");
     lc_name_out += std::to_string(rcvr_id);
@@ -41,6 +41,7 @@ void scot::ScotReceiver::__worker(struct ScotLog* log, uint32_t rcvr_id) {
 #endif
 
     struct ScotMessageHeader* rcvd;
+    SCOT_LOG_FINEGRAINED_T* pyld;
 
     while (1) {
 
@@ -51,25 +52,19 @@ void scot::ScotReceiver::__worker(struct ScotLog* log, uint32_t rcvr_id) {
         rcvd = reinterpret_cast<struct ScotMessageHeader*>(
             log->poll_next_local_log(SCOT_MSGTYPE_WAIT)
         );
+
+        pyld = reinterpret_cast<SCOT_LOG_FINEGRAINED_T*>(rcvd) 
+            + uintptr_t(sizeof(struct ScotMessageHeader));
     
-        
-
-
-
-
-
-
-
-
-
-
-
+        rpli->write_request(
+            pyld, rcvd->buf_sz, nullptr, 0, rcvd->hashv, SCOT_MSGTYPE_ACK
+        );
     }
 }
 
 
 void scot::ScotReceiver::worker_spawn() {
-    worker = std::thread([&](){ __worker(&(this->log), this->id); });
+    worker = std::thread([&](){ __worker(&(this->log), this->id, this->rpli); });
     worker.detach();
 }
 

@@ -35,6 +35,7 @@
 build
 hartebeest
 .vscode
+.csv
 
 CMakeLists.txt.user
 CMakeCache.txt

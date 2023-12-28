@@ -20,6 +20,7 @@
 #include "./scot-hb.hh"
 
 #include "../includes/scot-eval.hh"
+#include "../includes/scot-rule.hh"
 
 namespace scot {
     class ScotConfLoader {
@@ -85,12 +86,17 @@ namespace scot {
     class ScotChecker final : public ScotWriter {
     private:
         MessageOut msg_out;     // Logger
+        std::atomic_flag wait_lock;
+
+#define __WAIT_FOR_PROPACK__    do { wait_lock.test_and_set(std::memory_order_acquire); } while(0);
+#define __RELEASE_AT_PROPACK__  wait_lock.clear(std::memory_order_release);
 
     public:
         ScotChecker(SCOT_LOGALIGN_T*);
         virtual ~ScotChecker() = default;
 
         bool write_request(uint8_t*, uint16_t, uint8_t*, uint16_t, uint32_t, uint8_t);
+        void release_wait();
     };
 
 
@@ -120,10 +126,12 @@ namespace scot {
 
         uint32_t id;
 
-        void __worker(struct ScotLog*, uint32_t);
+        ScotReplicator* rpli;
+
+        void __worker(struct ScotLog*, uint32_t, ScotReplicator*);
 
     public:
-        ScotReceiver(SCOT_LOGALIGN_T*, uint32_t);
+        ScotReceiver(SCOT_LOGALIGN_T*, uint32_t, ScotReplicator*);
         ~ScotReceiver();
 
         // void spawn_worker(SCOT_REPLAYER_WORKER_T);
@@ -131,9 +139,11 @@ namespace scot {
         void worker_signal_toggle(uint32_t);
     };
 
-
     class ScotCore final {
     private:
+        uint32_t nid;
+        ScotJudge<uint32_t> uint_judge;  // For now, key is used as int.
+
         ScotReplicator* rpli = nullptr;
         ScotChecker* chkr = nullptr;
 
@@ -152,7 +162,8 @@ namespace scot {
         void finish();
 
         // Interface
-        int propose(uint8_t*, uint16_t, uint8_t*, uint16_t, uint32_t, uint8_t);
+        void add_rule(uint32_t, SCOT_RULEF_T);
+        int propose(uint8_t*, uint16_t, uint8_t*, uint16_t, uint32_t);
 
     };
 }

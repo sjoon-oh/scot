@@ -42,7 +42,7 @@ scot::ScotCore::ScotCore() : msg_out("scot-core") {
     // Initialize connection
     ScotConnection::get_instance().start();
 
-    int nid = ScotConnection::get_instance().get_my_nid();
+    nid = ScotConnection::get_instance().get_my_nid();
     // int qsize = ScotConnection::get_instance().get_quorum_sz();
 
     rpli = new ScotReplicator(
@@ -78,7 +78,8 @@ scot::ScotCore::ScotCore() : msg_out("scot-core") {
         
         mr = hartebeest_get_local_mr(HBKEY_PD, rkey_helper(HBKEY_MR_RCVR, nid, ctx.nid).c_str());
         vec_rcvr.push_back(
-            new ScotReceiver(reinterpret_cast<SCOT_LOGALIGN_T*>(mr->addr), ctx.nid)
+            new ScotReceiver(
+                reinterpret_cast<SCOT_LOGALIGN_T*>(mr->addr), ctx.nid, rpli)
         );
 
         vec_rcvr.back()->worker_spawn();
@@ -113,7 +114,7 @@ scot::ScotCore::~ScotCore() {
 
 int scot::ScotCore::propose(
     uint8_t* buf, uint16_t buf_sz, uint8_t* key, uint16_t key_sz, 
-    uint32_t hashv, uint8_t msg) {
+    uint32_t hashv) {
     
     //
     //
@@ -122,15 +123,20 @@ int scot::ScotCore::propose(
     __SCOT_INFO__(msg_out, "→ Propose called.");
 #endif
 
+    struct ScotOwnership ownership;
+    uint_judge.judge(&ownership, hashv);
+
+    if (ownership.owner == nid)
+        rpli->write_request(
+            buf, buf_sz, key, key_sz, hashv, SCOT_MSGTYPE_PURE
+        );
+    
+    else
+        chkr->write_request(
+            buf, buf_sz, key, key_sz, hashv, SCOT_MSGTYPE_WAIT
+        );
 
 
-    // chkr->write_request(
-    //     buf, buf_sz, key, key_sz, hashv, SCOT_MSGTYPE_WAIT
-    // );
-
-    // rpli->write_request(
-    //     buf, buf_sz, key, key_sz, hashv, msg
-    // );
 
     return 0;
 };
@@ -140,3 +146,7 @@ void scot::ScotCore::initialize() { };
 void scot::ScotCore::finish() { 
 
 };
+
+void scot::ScotCore::add_rule(uint32_t key, SCOT_RULEF_T rulef) {
+    uint_judge.register_rule(key, rulef);
+}

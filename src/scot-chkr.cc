@@ -15,6 +15,8 @@
 
 scot::ScotChecker::ScotChecker(SCOT_LOGALIGN_T* addr) 
     : ScotWriter(addr), msg_out("chkr") { 
+    
+    wait_lock.clear();
 }
 
 bool scot::ScotChecker::write_request(
@@ -94,17 +96,19 @@ bool scot::ScotChecker::write_request(
         for (auto& ctx: ScotConnection::get_instance().get_quorum()) {
             ret = hartebeest_rdma_send_poll(ctx.local.chkr_qp);
 
-#ifdef _ON_DEBUG_
             if (!ret) {
+#ifdef _ON_DEBUG_X
                 __SCOT_INFO__(msg_out, "→→ Polling error.");
+#endif
                 assert(0);
             }
-#endif
         }
 
 #ifdef _ON_DEBUG_X
         __SCOT_INFO__(msg_out, "→→ write_request end: {}", index);
 #endif
+
+        __WAIT_FOR_PROPACK__
 
     } __END_WRITE__
 
@@ -115,4 +119,9 @@ bool scot::ScotChecker::write_request(
     }
     
     return 0;
+}
+
+
+void scot::ScotChecker::release_wait() {
+    __RELEASE_AT_PROPACK__
 }

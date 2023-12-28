@@ -53,8 +53,7 @@ void worker(int nid, int tid, int gen_sz, int key_sz, scot::ScotCore& core_insta
             core_instance.propose(
                 (uint8_t*)static_buffer, gen_sz, 
                 (uint8_t*)static_buffer, key_sz, 
-                hm(std::string(static_buffer)), 
-                SCOT_MSGTYPE_PURE
+                hm(std::string(static_buffer))
             );
             ts.record_end(index);
 
