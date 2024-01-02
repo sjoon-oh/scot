@@ -61,7 +61,7 @@ void scot::ScotTimestamp::__dump_statistics(std::string& fname, long long int* e
     uint64_t front_1 = records * 0.01;
     uint64_t tail_99 = records * 0.99;
     
-    fprintf(fp, "total\t1\%ile\t50\%ile\t99\%ile\n");
+    fprintf(fp, "total\t1%%ile\t50%%ile\t99%%ile\n");
     fprintf(fp, "%lld\t%lf\t%lf\t%lf\n", 
         records,
         (elapsed[front_1] * 0.001),

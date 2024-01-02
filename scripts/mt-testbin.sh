@@ -37,7 +37,8 @@ else
     usleep 300
 fi
 
-numactl --membind 0 ./build/bin/scot-mt-testbin 16 4 4
+# Payload size, Key size, (Total: Payload + Key), Thread number
+numactl --membind 0 ./build/bin/scot-mt-testbin 24 8 1
 
 if [ "${HARTEBEEST_NID}" == "0" ]; then
     printf "${normalc}Killing Memcached at blanc...\n"

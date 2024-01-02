@@ -8,7 +8,7 @@
 
 #include <functional>
 
-
+#include "../sample/scot-balance-rule.hh"
 #include "../includes/scot-core.hh"
 
 #define REQ_NUM     1000000
@@ -35,38 +35,69 @@ void worker(int nid, int tid, int gen_sz, int key_sz, scot::ScotCore& core_insta
 
     m_out.get_logger()->info("{} spawned.", logger_name);
 
-    std::mt19937 generator;
+    std::mt19937 generator((unsigned int)time(NULL));
     std::hash<std::string> hm;
 
     scot::ScotTimestamp ts(logger_name + ".csv");
 
-
+    uint32_t hashv;
     sleep(3); // Wait for a bit.
 
+/*
     if (nid == 0) {
         for (int i = 0; i < REQ_NUM; i++) {
 
             // Propose
             generate_random_str(generator, static_buffer, gen_sz);
+            hashv = hm(std::string(static_buffer));
 
             uint64_t index = ts.record_start();
             core_instance.propose(
                 (uint8_t*)static_buffer, gen_sz, 
                 (uint8_t*)static_buffer, key_sz, 
-                hm(std::string(static_buffer))
+                hashv
             );
             ts.record_end(index);
 
             std::memset(static_buffer, 0, 4096);
 
             if (i % 50000 == 0) {
-                float perc = (i / REQ_NUM) * 100;
+                float perc = ((i * 100) / REQ_NUM);
                 m_out.get_logger()->info("PROPOSE: {:03.2f}%", perc);
             }
         }
+
+#if(REQ_NUM < 100000)
+        sleep(5);
+#endif
     }
     else
         sleep(10);
+*/
+
+    for (int i = 0; i < REQ_NUM; i++) {
+
+        // Propose
+        generate_random_str(generator, static_buffer, gen_sz);
+        hashv = hm(std::string(static_buffer));
+
+        uint64_t index = ts.record_start();
+        core_instance.propose(
+            (uint8_t*)static_buffer, gen_sz, 
+            (uint8_t*)static_buffer, key_sz, 
+            hashv
+        );
+        ts.record_end(index);
+
+        std::memset(static_buffer, 0, 4096);
+
+        if (i % 50000 == 0) {
+            float perc = ((i * 100) / REQ_NUM);
+            m_out.get_logger()->info("PROPOSE: {:03.2f}%", perc);
+        }
+    }
+
+    sleep(20);
 
     return;
 }
@@ -82,6 +113,16 @@ int main(int argc, char* argv[]) {
     //
     // Start core instance
     scot::ScotCore scot_instance;
+
+    scot::rule_balance_init(scot_instance.get_qsize());
+
+    scot_instance.add_rule(2, scot::rule_balance_2);
+    scot_instance.add_rule(3, scot::rule_balance_3);
+
+    scot_instance.update_active(3);
+
+    std::cout << "Rule added.\n";
+
     scot_instance.initialize();
 
     int nid = scot::ScotConnection::get_instance().get_my_nid();

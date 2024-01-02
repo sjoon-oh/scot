@@ -43,7 +43,7 @@ scot::ScotCore::ScotCore() : msg_out("scot-core") {
     ScotConnection::get_instance().start();
 
     nid = ScotConnection::get_instance().get_my_nid();
-    // int qsize = ScotConnection::get_instance().get_quorum_sz();
+    qsize = ScotConnection::get_instance().get_quorum_sz();
 
     rpli = new ScotReplicator(
             reinterpret_cast<SCOT_LOGALIGN_T*>(
@@ -66,7 +66,8 @@ scot::ScotCore::ScotCore() : msg_out("scot-core") {
         
         mr = hartebeest_get_local_mr(HBKEY_PD, rkey_helper(HBKEY_MR_RPLY, nid, ctx.nid).c_str());
         vec_rply.push_back(
-            new ScotReplayer(reinterpret_cast<SCOT_LOGALIGN_T*>(mr->addr), ctx.nid)
+            new ScotReplayer(
+                reinterpret_cast<SCOT_LOGALIGN_T*>(mr->addr), ctx.nid, chkr)
         );
 
         vec_rply.back()->worker_spawn();
@@ -115,16 +116,13 @@ scot::ScotCore::~ScotCore() {
 int scot::ScotCore::propose(
     uint8_t* buf, uint16_t buf_sz, uint8_t* key, uint16_t key_sz, 
     uint32_t hashv) {
-    
-    //
-    //
-    // Rules here?
-#ifdef _ON_DEBUG_X
-    __SCOT_INFO__(msg_out, "→ Propose called.");
-#endif
 
     struct ScotOwnership ownership;
     uint_judge.judge(&ownership, hashv);
+
+#ifdef __DEBUG__X
+    __SCOT_INFO__(msg_out, "→ Proposing {}, owner({}).", hashv, ownership.owner);
+#endif
 
     if (ownership.owner == nid)
         rpli->write_request(
@@ -133,11 +131,9 @@ int scot::ScotCore::propose(
     
     else
         chkr->write_request(
-            buf, buf_sz, key, key_sz, hashv, SCOT_MSGTYPE_WAIT
+            buf, buf_sz, key, key_sz, hashv, ownership.owner
         );
-
-
-
+        
     return 0;
 };
 
@@ -147,6 +143,22 @@ void scot::ScotCore::finish() {
 
 };
 
+
 void scot::ScotCore::add_rule(uint32_t key, SCOT_RULEF_T rulef) {
     uint_judge.register_rule(key, rulef);
+}
+
+
+void scot::ScotCore::update_active(uint32_t key) {
+    uint_judge.update_active(key);
+}
+
+
+uint32_t scot::ScotCore::get_nid() {
+    return nid;
+}
+
+
+uint32_t scot::ScotCore::get_qsize() {
+    return qsize;
 }

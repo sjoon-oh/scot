@@ -24,10 +24,10 @@ file(GLOB scotlib_src
     ${PROJECT_SOURCE_DIR}/src/*.cc 
     ${PROJECT_SOURCE_DIR}/includes/*.h
     ${PROJECT_SOURCE_DIR}/includes/*.hh
-    ${PROJECT_SOURCE_DIR}/sample/*.h
-    ${PROJECT_SOURCE_DIR}/sample/*.hh
-    ${PROJECT_SOURCE_DIR}/sample/*.c
-    ${PROJECT_SOURCE_DIR}/sample/*.cc
+    ${PROJECT_SOURCE_DIR}/src/sample/*.h
+    ${PROJECT_SOURCE_DIR}/src/sample/*.hh
+    ${PROJECT_SOURCE_DIR}/src/sample/*.c
+    ${PROJECT_SOURCE_DIR}/src/sample/*.cc
     )
 
 add_library(${scotlib} SHARED ${scotlib_src})

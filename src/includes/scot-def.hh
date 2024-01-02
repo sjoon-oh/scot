@@ -1,6 +1,6 @@
 #pragma once
 
-#define _ON_DEBUG_
+#define __DEBUG__
 
 // Default Envar
 // ID starts with 0, monotonically, at initialization..
@@ -51,6 +51,7 @@
 // SCOT Message Values
 #define SCOT_LOGENTRY_CANARY    36
 
+#define SCOT_MSGTYPE_NONE       0x00
 #define SCOT_MSGTYPE_ACK        0x01
 #define SCOT_MSGTYPE_PURE       0x02
 #define SCOT_MSGTYPE_WAIT       0x04

@@ -14,7 +14,7 @@
 
 
 scot::ScotChecker::ScotChecker(SCOT_LOGALIGN_T* addr) 
-    : ScotWriter(addr), msg_out("chkr") { 
+    : ScotWriter(addr), msg_out("chkr"), wait_hashv(0) { 
     
     wait_lock.clear();
 }
@@ -22,7 +22,7 @@ scot::ScotChecker::ScotChecker(SCOT_LOGALIGN_T* addr)
 bool scot::ScotChecker::write_request(
     uint8_t* buf, uint16_t buf_sz, 
     uint8_t* key, uint16_t key_sz, 
-    uint32_t hashv, uint8_t msg) {
+    uint32_t hashv, uint32_t owner) {
 
     uint32_t index = slot.register_entry(
         {   
@@ -31,7 +31,7 @@ bool scot::ScotChecker::write_request(
             .buffer_sz  = buf_sz,
             .key        = key,
             .key_sz     = key_sz,
-            .msg        = msg
+            .msg        = SCOT_MSGTYPE_WAIT
         }
     );
 
@@ -49,7 +49,7 @@ bool scot::ScotChecker::write_request(
 
         bool ret = 0;
 
-#ifdef _ON_DEBUG_X
+#ifdef __DEBUG__X
         struct ScotMessageHeader* local_header = 
             reinterpret_cast<struct ScotMessageHeader*>(header);
 
@@ -68,6 +68,8 @@ bool scot::ScotChecker::write_request(
         );
 #endif
 
+        wait_hashv = hashv;
+
         // 
         // Send WR first for all quorums
         for (auto& ctx: ScotConnection::get_instance().get_quorum()) {
@@ -76,35 +78,45 @@ bool scot::ScotChecker::write_request(
                 reinterpret_cast<SCOT_LOGALIGN_T*>(
                         uintptr_t(ctx.remote.rcvr_mr->addr) + offset);
 
-            ret = hartebeest_rdma_post_single_fast(
-                ctx.local.chkr_qp,          // Local QP (Checker)
-                header,                     // Local starting point of a RDMA message
-                remote_target_addr,         // To where at remote?
-                log_sz,                     // Total message size
-                IBV_WR_RDMA_WRITE,
-                ctx.local.chkr_mr->lkey,    // Local MR acces key
-                ctx.remote.rcvr_mr->rkey,   // Remote MR access key
-                ctx.nid);
+            if (owner == ctx.nid) {
+                reinterpret_cast<struct ScotMessageHeader*>(header)->msg = 
+                    SCOT_MSGTYPE_WAIT;
 
-#ifdef _ON_DEBUG_
+                ret = hartebeest_rdma_post_single_fast(
+                    ctx.local.chkr_qp,          // Local QP (Checker)
+                    header,                     // Local starting point of a RDMA message
+                    remote_target_addr,         // To where at remote?
+                    log_sz,                     // Total message size
+                    IBV_WR_RDMA_WRITE,
+                    ctx.local.chkr_mr->lkey,    // Local MR acces key
+                    ctx.remote.rcvr_mr->rkey,   // Remote MR access key
+                    ctx.nid);
+            }
+            else {
+                reinterpret_cast<struct ScotMessageHeader*>(header)->msg = 
+                    SCOT_MSGTYPE_HDRONLY;
+
+                ret = hartebeest_rdma_post_single_fast(
+                    ctx.local.chkr_qp,          // Local QP (Checker)
+                    header,                     // Local starting point of a RDMA message
+                    remote_target_addr,         // To where at remote?
+                    sizeof(struct ScotMessageHeader),
+                                                // Total message size
+                    IBV_WR_RDMA_WRITE,
+                    ctx.local.chkr_mr->lkey,    // Local MR acces key
+                    ctx.remote.rcvr_mr->rkey,   // Remote MR access key
+                    ctx.nid);
+            }
+
+            ret = hartebeest_rdma_send_poll(ctx.local.chkr_qp);
+
+#ifdef __DEBUG__X
             assert(ret != false);
 #endif
         }
 
-        //
-        // Wait for else.
-        for (auto& ctx: ScotConnection::get_instance().get_quorum()) {
-            ret = hartebeest_rdma_send_poll(ctx.local.chkr_qp);
 
-            if (!ret) {
-#ifdef _ON_DEBUG_X
-                __SCOT_INFO__(msg_out, "→→ Polling error.");
-#endif
-                assert(0);
-            }
-        }
-
-#ifdef _ON_DEBUG_X
+#ifdef __DEBUG__X
         __SCOT_INFO__(msg_out, "→→ write_request end: {}", index);
 #endif
 
@@ -112,8 +124,10 @@ bool scot::ScotChecker::write_request(
 
     } __END_WRITE__
 
+    wait_hashv = 0;
+
     if (slot.mark_entry_finished(index, curr) == SCOT_SLOT_RESET) { // Reset comes here.
-#ifdef _ON_DEBUG_X
+#ifdef __DEBUG__X
         __SCOT_INFO__(msg_out, "→→ Slot/hasht reset triggered");
 #endif
     }
@@ -122,6 +136,13 @@ bool scot::ScotChecker::write_request(
 }
 
 
-void scot::ScotChecker::release_wait() {
-    __RELEASE_AT_PROPACK__
+void scot::ScotChecker::release_wait(uint32_t hashv) {
+    
+    if (wait_hashv == hashv) {
+        __RELEASE_AT_PROPACK__
+
+#ifdef __DEBUG__X
+    __SCOT_INFO__(msg_out, "→→ Checker released, for {}", wait_hashv);
+#endif
+    }
 }

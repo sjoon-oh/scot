@@ -80,7 +80,7 @@ bool scot::ScotReplicator::write_request(
 
         bool ret = 0;
 
-#ifdef _ON_DEBUG_X
+#ifdef __DEBUG__X
         struct ScotMessageHeader* local_header = 
             reinterpret_cast<struct ScotMessageHeader*>(header);
 
@@ -117,7 +117,7 @@ bool scot::ScotReplicator::write_request(
                 ctx.remote.rply_mr->rkey,   // Remote MR access key
                 ctx.nid);
 
-#ifdef _ON_DEBUG_
+#ifdef __DEBUG__X
             assert(ret != false);
 #endif
         }
@@ -127,7 +127,7 @@ bool scot::ScotReplicator::write_request(
         for (auto& ctx: ScotConnection::get_instance().get_quorum()) {
             ret = hartebeest_rdma_send_poll(ctx.local.rpli_qp);
 
-#ifdef _ON_DEBUG_
+#ifdef __DEBUG__X
             if (!ret) {
                 __SCOT_INFO__(msg_out, "→→ Polling error.");
                 assert(0);
@@ -135,14 +135,14 @@ bool scot::ScotReplicator::write_request(
 #endif
         }
 
-#ifdef _ON_DEBUG_X
+#ifdef __DEBUG__X
         __SCOT_INFO__(msg_out, "→→ write_request end: {}", index);
 #endif
 
     } __END_WRITE__
 
     if (slot.mark_entry_finished(index, latest, &hasht) == SCOT_SLOT_RESET) { // Reset comes here.
-#ifdef _ON_DEBUG_X
+#ifdef __DEBUG__X
         __SCOT_INFO__(msg_out, "→→ Slot/hasht reset triggered");
 #endif
     }

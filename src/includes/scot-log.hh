@@ -56,9 +56,3 @@ namespace scot {
 }
 
 #define LOG_WRAPPER_INSTANCE(LOG)       (*(reinterpret_cast<struct ScotAlignedLog*>(LOG)))
-
-
-
-
-
-

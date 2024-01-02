@@ -120,32 +120,42 @@ SCOT_LOGALIGN_T* scot::ScotLog::poll_next_local_log(uint8_t msg_detect) {
 
     // Wait until a message is written from the remote.
     // 1. Wait for message detect.
-    while (rcv_header->msg != msg_detect) {
-
-    }
+    uint8_t detect_type = 0;
+    while ((detect_type = (rcv_header->msg & msg_detect)) == 0)
+        detect_type = 0;
 
     cur_align_index += 2;
     pld_pos += uintptr_t(sizeof(struct ScotMessageHeader));
 
-#ifdef _ON_DEBUG_X
-    printf("Detected {hashv: %ld, bufsz: %ld, inst: %ld, msg: %ld, payload: %s}.\n", 
+#ifdef __DEBUG__X
+
+    std::string mtype;
+    switch (rcv_header->msg) {
+        case SCOT_MSGTYPE_ACK: mtype = "ACK"; break;
+        case SCOT_MSGTYPE_PURE: mtype = "PURE"; break;
+        case SCOT_MSGTYPE_WAIT: mtype = "WAIT"; break;
+        case SCOT_MSGTYPE_HDRONLY: mtype = "HDR"; break;
+    }
+
+    printf("Detected {hashv: %ld, bufsz: %ld, msg: %s, payload: %s}.\n", 
         rcv_header->hashv,
         rcv_header->buf_sz,
-        rcv_header->inst,
-        rcv_header->msg,
+        mtype.c_str(),
         (char*)pld_pos
         );
+    
 #endif
 
-    rcv_header->msg = 0;
+    // rcv_header->msg = 0;
 
     // 3. Wait for canary (Validation).
     cnry_pos = pld_pos + uintptr_t(rcv_header->buf_sz);
-    while ((*(reinterpret_cast<uint8_t*>(cnry_pos))) != SCOT_LOGENTRY_CANARY) {
+    if (rcv_header->msg != SCOT_MSGTYPE_HDRONLY) {
+        while ((*(reinterpret_cast<uint8_t*>(cnry_pos))) != SCOT_LOGENTRY_CANARY) {
 
+        }
+        *(reinterpret_cast<uint8_t*>(cnry_pos)) = 0; // Reset canary value.
     }
-
-    *(reinterpret_cast<uint8_t*>(cnry_pos)) = 0; // Reset canary value.
 
     cur_align_index = __get_next_aligned_idx(cur_align_index, 
         (rcv_header->buf_sz + sizeof(uint8_t)));
