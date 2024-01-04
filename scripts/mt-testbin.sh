@@ -16,6 +16,8 @@ if [[ ${workspace_home} != ${project_home} ]]; then
     exit
 fi
 
+rm ./report/*.csv
+
 workspace_home=`pwd`
 
 export HARTEBEEST_PARTICIPANTS=0,1,2
@@ -45,6 +47,9 @@ if [ "${HARTEBEEST_NID}" == "0" ]; then
     sleep 5
     ssh oslab@143.248.39.169 "pkill -9 memcached"
 fi
+
+mkdir -p report
+mv *.csv ./report
 
 exit
 

@@ -49,7 +49,7 @@ bool scot::ScotChecker::write_request(
 
         bool ret = 0;
 
-#ifdef __DEBUG__X
+#ifdef __DEBUG__
         struct ScotMessageHeader* local_header = 
             reinterpret_cast<struct ScotMessageHeader*>(header);
 
@@ -110,13 +110,13 @@ bool scot::ScotChecker::write_request(
 
             ret = hartebeest_rdma_send_poll(ctx.local.chkr_qp);
 
-#ifdef __DEBUG__X
+#ifdef __DEBUG__
             assert(ret != false);
 #endif
         }
 
 
-#ifdef __DEBUG__X
+#ifdef __DEBUG__
         __SCOT_INFO__(msg_out, "→→ write_request end: {}", index);
 #endif
 
@@ -127,7 +127,7 @@ bool scot::ScotChecker::write_request(
     wait_hashv = 0;
 
     if (slot.mark_entry_finished(index, curr) == SCOT_SLOT_RESET) { // Reset comes here.
-#ifdef __DEBUG__X
+#ifdef __DEBUG__
         __SCOT_INFO__(msg_out, "→→ Slot/hasht reset triggered");
 #endif
     }
@@ -141,7 +141,7 @@ void scot::ScotChecker::release_wait(uint32_t hashv) {
     if (wait_hashv == hashv) {
         __RELEASE_AT_PROPACK__
 
-#ifdef __DEBUG__X
+#ifdef __DEBUG__
     __SCOT_INFO__(msg_out, "→→ Checker released, for {}", wait_hashv);
 #endif
     }

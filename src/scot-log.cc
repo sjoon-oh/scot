@@ -127,7 +127,7 @@ SCOT_LOGALIGN_T* scot::ScotLog::poll_next_local_log(uint8_t msg_detect) {
     cur_align_index += 2;
     pld_pos += uintptr_t(sizeof(struct ScotMessageHeader));
 
-#ifdef __DEBUG__X
+#ifdef __DEBUG__
 
     std::string mtype;
     switch (rcv_header->msg) {

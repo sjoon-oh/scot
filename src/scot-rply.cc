@@ -35,7 +35,7 @@ void scot::ScotReplayer::__worker(
     MessageOut lc_out(lc_name_out.c_str());
 
     // Log base
-#ifdef __DEBUG__X
+#ifdef __DEBUG__
     SCOT_LOGALIGN_T* log_base = log->get_base();
     __SCOT_INFO__(lc_out, "{} spawned. Log base starts at {:x}.", 
         lc_name_out, uintptr_t(log_base));

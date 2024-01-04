@@ -120,7 +120,7 @@ int scot::ScotCore::propose(
     struct ScotOwnership ownership;
     uint_judge.judge(&ownership, hashv);
 
-#ifdef __DEBUG__X
+#ifdef __DEBUG__
     __SCOT_INFO__(msg_out, "→ Proposing {}, owner({}).", hashv, ownership.owner);
 #endif
 
