@@ -72,3 +72,7 @@
 // SCOT Heartbeat Scoreboard
 #define SCOT_SCB_FINEGRAINED_T  uint8_t
 #define SCOT_SCB_WIDE_T         uint16_t
+
+// For records
+#define SCOT_OPTIMIZATION_START
+#define SCOT_OPTIMIZATION_END

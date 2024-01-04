@@ -11,7 +11,11 @@
 #include "../sample/scot-balance-rule.hh"
 #include "../includes/scot-core.hh"
 
+#ifdef __DEBUG__
+#define REQ_NUM     10000
+#else
 #define REQ_NUM     1000000
+#endif
 
 void generate_random_str(std::mt19937& generator, char* buffer, int len) {
 

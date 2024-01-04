@@ -66,74 +66,105 @@ bool scot::ScotReplicator::write_request(
     struct ScotSlotEntry* curr = slot.get_slot_entry(index);
     struct ScotSlotEntry* latest = curr;
 
+    SCOT_LOGALIGN_T* header, *pf_header;
+    int pf_count = 0;
+
     __ht_try_insert(curr);
     __START_WRITE__ {
 
         latest = __ht_get_latest_entry(curr);
 
-        SCOT_LOGALIGN_T* header = log.write_local_log(latest); // Write to the local log here.        
-        size_t log_sz = sizeof(struct ScotMessageHeader) + 
-            static_cast<size_t>(latest->buffer_sz) + sizeof(uint8_t);
+        // Am I marked as deleted? 
+        // Or am I already replicated by prefetch?
+        if (!IS_MARKED_AS_DELETED(latest->next) && (latest->ready != 0)) {
 
-        size_t offset = uintptr_t(header) - uintptr_t(log.get_base());
-        SCOT_LOGALIGN_T* remote_target_addr;
+            SCOT_OPTIMIZATION_START {
 
-        bool ret = 0;
+                // Set prefetch size here.
+                // Dead nodes will be notified by quroum_conns.
+                size_t pf_size = ScotConnection::get_instance().get_quorum().size() + 1;
+                size_t logsz = 0, pf_logsz = 0;
+
+                header = log.write_local_log(latest); // At least, replicate this one.
+                logsz = sizeof(struct ScotMessageHeader) + 
+                    static_cast<size_t>(latest->buffer_sz) + sizeof(uint8_t);
+
+                for (int i = 1; i < pf_size; i++) {
+                    
+                    if ((index + i) == (SCOT_SLOT_COUNTS - 1))
+                        break;
+
+                    curr = slot.get_slot_entry(index + i);
+                    if (curr->ready != 1)
+                        break;
+
+                    latest = __ht_get_latest_entry(curr);
+
+                    // Record to local MR
+                    pf_header = log.write_local_log(latest);
+                    pf_logsz = sizeof(struct ScotMessageHeader) + 
+                        static_cast<size_t>(latest->buffer_sz) + sizeof(uint8_t);
+
+                    pf_count++;
+                }
+
+                if (pf_count > 0)
+                    logsz = ((uintptr_t(pf_header) + pf_logsz) - uintptr_t(header));
 
 #ifdef __DEBUG__
-        struct ScotMessageHeader* local_header = 
-            reinterpret_cast<struct ScotMessageHeader*>(header);
-
-        uint32_t unbind_hashv   = local_header->hashv;
-        uint16_t unbind_bufsz   = local_header->buf_sz;
-        uint8_t unbind_inst     = local_header->inst;
-        uint8_t unbind_msg      = local_header->msg;
-
-        SCOT_LOG_FINEGRAINED_T* local_payload = 
-            (SCOT_LOG_FINEGRAINED_T*)(header) + (sizeof(struct ScotMessageHeader));
-
-        __SCOT_INFO__(
-            msg_out, 
-            "→→ RDMA message local header: \n-- Report --\nhashv({}), buf_sz({}), inst({}), msg({}), total {} bytes\n----", 
-            unbind_hashv, unbind_bufsz, unbind_inst, unbind_msg, log_sz
-        );
+                __SCOT_INFO__(
+                    msg_out, "→→ Fetch count: {}, write size ({}) ", (pf_count), logsz
+                );
 #endif
 
-        // 
-        // Send WR first for all quorums
-        for (auto& ctx: ScotConnection::get_instance().get_quorum()) {
-            
-            remote_target_addr = 
-                reinterpret_cast<SCOT_LOGALIGN_T*>(
-                        uintptr_t(ctx.remote.rply_mr->addr) + offset);
+                size_t offset = uintptr_t(header) - uintptr_t(log.get_base());
+                SCOT_LOGALIGN_T* remote_target_addr;
 
-            ret = hartebeest_rdma_post_single_fast(
-                ctx.local.rpli_qp,          // Local QP
-                header,                     // Local starting point of a RDMA message
-                remote_target_addr,         // To where at remote?
-                log_sz,                     // Total message size
-                IBV_WR_RDMA_WRITE,
-                ctx.local.rpli_mr->lkey,    // Local MR acces key
-                ctx.remote.rply_mr->rkey,   // Remote MR access key
-                ctx.nid);
+                bool ret = 0;
 
+                // 
+                // Send WR first for all quorums
+                for (auto& ctx: ScotConnection::get_instance().get_quorum()) {
+                    
+                    remote_target_addr = 
+                        reinterpret_cast<SCOT_LOGALIGN_T*>(
+                                uintptr_t(ctx.remote.rply_mr->addr) + offset);
+
+                    ret = hartebeest_rdma_post_single_fast(
+                        ctx.local.rpli_qp,          // Local QP
+                        header,                     // Local starting point of a RDMA message
+                        remote_target_addr,         // To where at remote?
+                        logsz,                      // Total message size
+                        IBV_WR_RDMA_WRITE,
+                        ctx.local.rpli_mr->lkey,    // Local MR acces key
+                        ctx.remote.rply_mr->rkey,   // Remote MR access key
+                        ctx.nid);
 #ifdef __DEBUG__
-            assert(ret != false);
+                    assert(ret != false);
+#endif
+                }
+
+                //
+                // Wait for else.
+                for (auto& ctx: ScotConnection::get_instance().get_quorum()) {
+                    ret = hartebeest_rdma_send_poll(ctx.local.rpli_qp);
+#ifdef __DEBUG__
+                    if (!ret) {
+                        __SCOT_INFO__(msg_out, "→→ Polling error.");
+                        assert(0);
+                    }
+#endif
+                }
+      
+            } SCOT_OPTIMIZATION_END
+        }
+        else {
+#ifdef __DEBUG__
+            __SCOT_INFO__(msg_out, "→→ Pre-replicated, skipping.");
 #endif
         }
 
-        //
-        // Wait for else.
-        for (auto& ctx: ScotConnection::get_instance().get_quorum()) {
-            ret = hartebeest_rdma_send_poll(ctx.local.rpli_qp);
-
-#ifdef __DEBUG__
-            if (!ret) {
-                __SCOT_INFO__(msg_out, "→→ Polling error.");
-                assert(0);
-            }
-#endif
-        }
+        latest->ready = latest->blocked = 0;
 
 #ifdef __DEBUG__
         __SCOT_INFO__(msg_out, "→→ write_request end: {}", index);
