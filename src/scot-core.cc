@@ -124,17 +124,20 @@ int scot::ScotCore::propose(
     __SCOT_INFO__(msg_out, "→ Proposing {}, owner({}).", hashv, ownership.owner);
 #endif
 
-    if (ownership.owner == nid)
+    if (ownership.owner == nid) {
         rpli->write_request(
             buf, buf_sz, key, key_sz, hashv, SCOT_MSGTYPE_PURE
         );
-    
-    else
+        return SCOT_MSGTYPE_PURE;
+    }
+    else {
         chkr->write_request(
             buf, buf_sz, key, key_sz, hashv, ownership.owner
         );
-        
-    return 0;
+        return SCOT_MSGTYPE_WAIT;
+    }
+
+    return SCOT_MSGTYPE_NONE;
 };
 
 

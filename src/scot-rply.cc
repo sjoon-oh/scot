@@ -57,8 +57,17 @@ void scot::ScotReplayer::__worker(
         pyld = reinterpret_cast<SCOT_LOG_FINEGRAINED_T*>(rcvd) 
             + uintptr_t(sizeof(struct ScotMessageHeader));
 
-        if (rcvd->msg == SCOT_MSGTYPE_ACK) {
+        if (rcvd->msg & SCOT_MSGTYPE_ACK) {
             chkr->release_wait(rcvd->hashv);
+        }
+
+        if (rcvd->msg & SCOT_MSGTYPE_COMMPREV) {
+            
+            // Replay function goes here.
+
+#ifdef __DEBUG__
+            __SCOT_INFO__(lc_out, "→ Commit piggybacked. Safe to replay.");
+#endif
         }
 
         rcvd->msg = SCOT_MSGTYPE_NONE;

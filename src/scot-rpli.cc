@@ -51,6 +51,13 @@ bool scot::ScotReplicator::write_request(
     uint8_t* key, uint16_t key_sz, 
     uint32_t hashv, uint8_t msg) {
 
+    /*
+    // Make piggyback commit.
+    uint8_t new_msg = msg;
+    if (msg | SCOT_MSGTYPE_PURE)
+        new_msg |= SCOT_MSGTYPE_COMMPREV;
+    */
+
     uint32_t index = slot.register_entry(
         {   
             .hashv      = hashv,
@@ -88,6 +95,9 @@ bool scot::ScotReplicator::write_request(
                 header = log.write_local_log(latest); // At least, replicate this one.
                 logsz = sizeof(struct ScotMessageHeader) + 
                     static_cast<size_t>(latest->buffer_sz) + sizeof(uint8_t);
+
+                // Make this the first.
+                reinterpret_cast<struct ScotMessageHeader*>(header)->msg |= SCOT_MSGTYPE_COMMPREV;
 
                 for (int i = 1; i < pf_size; i++) {
                     

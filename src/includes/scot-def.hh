@@ -56,6 +56,7 @@
 #define SCOT_MSGTYPE_PURE       0x02
 #define SCOT_MSGTYPE_WAIT       0x04
 #define SCOT_MSGTYPE_HDRONLY    0x08
+#define SCOT_MSGTYPE_COMMPREV   0x10
 
 #define SCOT_HT_SIZE            (1 << 20)
 #define SCOT_HT_NBUCKET         (SCOT_HT_SIZE >> 3)
