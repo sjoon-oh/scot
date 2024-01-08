@@ -54,13 +54,37 @@ target_link_libraries(${scot_testbin} PUBLIC ${scotlib} hartebeest)
 set(scot_mt_testbin scot-mt-testbin)
 add_executable(
     ${scot_mt_testbin}
-    ${PROJECT_SOURCE_DIR}/src/tests/mt-test.cc
+    ${PROJECT_SOURCE_DIR}/src/tests/scot-mt-test.cc
 )
 set_target_properties(
     ${scot_mt_testbin} 
     PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/build/bin
 )
 target_link_libraries(${scot_mt_testbin} PUBLIC ${scotlib} hartebeest)
+
+set(scot_mt_testbin_skew scot-mt-testbin-skew)
+add_executable(
+    ${scot_mt_testbin_skew}
+    ${PROJECT_SOURCE_DIR}/src/tests/scot-mt-test.cc
+)
+set_target_properties(
+    ${scot_mt_testbin_skew} 
+    PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/build/bin
+)
+target_link_libraries(${scot_mt_testbin_skew} PUBLIC ${scotlib} hartebeest)
+
+# Others
+# Multi-threded test binary
+set(mp_mt_testbin mp-mt-testbin)
+add_executable(
+    ${mp_mt_testbin}
+    ${PROJECT_SOURCE_DIR}/src/tests/mp-mt-test.cc
+)
+set_target_properties(
+    ${mp_mt_testbin} 
+    PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/build/bin
+)
+target_link_libraries(${mp_mt_testbin} PUBLIC ${scotlib} hartebeest)
 
 
 
