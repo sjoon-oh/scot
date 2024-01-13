@@ -1,8 +1,7 @@
 #pragma once
-/* github.com/sjoon-oh/scot
- * @author: Sukjoon Oh, sjoon@kaist.ac.kr
- * 
- * Project scot
+/* Project SCOT
+ * Author: Sukjoon Oh (sjoon@kaist.ac.kr)
+ * https://github.com/sjoon-oh/
  */
 
 //

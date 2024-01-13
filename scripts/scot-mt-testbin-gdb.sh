@@ -7,7 +7,8 @@ warning='\033[0;31m[WARNING]\033[0m '
 normalc='\033[0;32m[MESSAGE]\033[0m '
 
 args=$@
-printf "${normalc}Arguments: ${args}\n"
+scriptbn=$(basename "$0" .sh)
+printf "${normalc}${scriptbn} arguments: ${args}\n"
 
 #
 # Setting proj home

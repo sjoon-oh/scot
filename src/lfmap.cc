@@ -1,3 +1,8 @@
+/* Project SCOT
+ * Author: Sukjoon Oh (sjoon@kaist.ac.kr)
+ * https://github.com/sjoon-oh/
+ */
+
 #include <cstdlib>
 #include <cstdio>
 

@@ -1,5 +1,10 @@
 #pragma once
 
+/* Project SCOT
+ * Author: Sukjoon Oh (sjoon@kaist.ac.kr)
+ * https://github.com/sjoon-oh/
+ */
+
 #include <map>
 #include <string>
 #include <vector>
@@ -70,7 +75,7 @@ namespace scot {
     };
 
 
-    class ScotReplicator final : public ScotWriter {
+    class ScotReplicator : public ScotWriter {
     private:
         scot::hash::LockfreeMap hasht;
 
@@ -88,7 +93,7 @@ namespace scot {
     };
 
 
-    class ScotChecker final : public ScotWriter {
+    class ScotChecker : public ScotWriter {
     private:
         MessageOut msg_out;     // Logger
 
@@ -107,7 +112,7 @@ namespace scot {
     };
 
 
-    class ScotReplayer final : public ScotReader {
+    class ScotReplayer : public ScotReader {
     private:
         std::thread worker;
         uint32_t worker_signal; // Worker thread only reads.
@@ -127,7 +132,7 @@ namespace scot {
     };
 
 
-    class ScotReceiver final : public ScotReader {
+    class ScotReceiver : public ScotReader {
     private:
         std::thread worker;
         uint32_t worker_signal; // Worker thread only reads.
@@ -147,7 +152,7 @@ namespace scot {
         void worker_signal_toggle(uint32_t);
     };
 
-    class ScotCore final {
+    class ScotCore {
     private:
         uint32_t nid;
         uint32_t qsize;

@@ -1,4 +1,8 @@
 #pragma once
+/* Project SCOT
+ * Author: Sukjoon Oh (sjoon@kaist.ac.kr)
+ * https://github.com/sjoon-oh/
+ */
 
 #include <map>
 #include <string>

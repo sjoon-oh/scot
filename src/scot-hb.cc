@@ -1,3 +1,8 @@
+/* Project SCOT
+ * Author: Sukjoon Oh (sjoon@kaist.ac.kr)
+ * https://github.com/sjoon-oh/
+ */
+
 #include "../extern/nlohmann/json.hpp"
 #include "../hartebeest/src/includes/hartebeest-c.h"
 

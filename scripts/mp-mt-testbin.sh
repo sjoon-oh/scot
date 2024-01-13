@@ -7,7 +7,8 @@ warning='\033[0;31m[WARNING]\033[0m '
 normalc='\033[0;32m[MESSAGE]\033[0m '
 
 args=$@
-printf "${normalc}Arguments: ${args}\n"
+scriptbn=$(basename "$0" .sh)
+printf "${normalc}${scriptbn} arguments: ${args}\n"
 
 #
 # Setting proj home
@@ -15,8 +16,6 @@ if [[ ${workspace_home} != ${project_home} ]]; then
     printf "${warning}Currently in wrong directory: `pwd`\n"
     exit
 fi
-
-rm ./report/*.csv
 
 workspace_home=`pwd`
 
@@ -55,6 +54,15 @@ fi
 
 mkdir -p report
 mv *.csv ./report
+
+cd report
+# Rename all.
+
+find . -type f -name 'wrkr*' | while read FILE ; do
+    subst="s/wrkr/${scriptbn}-$(date +%F-%T)"-wrkr/
+    new_name="$(echo ${FILE} |sed -e ${subst})" ;
+    mv "${FILE}" "${new_name}" ;
+done 
 
 exit
 
