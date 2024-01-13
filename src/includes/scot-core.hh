@@ -24,6 +24,10 @@
 namespace scot {
     class ScotConfLoader {
     private:
+        // Local attributes
+        std::map<std::string, uint64_t> confs;
+
+        MessageOut msg_out;
 
     public:
         ScotConfLoader();
@@ -33,6 +37,8 @@ namespace scot {
             static ScotConfLoader loader;
             return loader;
         }
+
+        uint64_t get_confval(const char*);
     };
 
     // Writer interface
@@ -146,6 +152,7 @@ namespace scot {
         uint32_t nid;
         uint32_t qsize;
 
+        ScotConfLoader ldr;
         ScotJudge<uint32_t> uint_judge;  // For now, key is used as int.
 
         ScotReplicator* rpli = nullptr;
@@ -155,8 +162,10 @@ namespace scot {
         std::vector<ScotReceiver*> vec_rcvr;    // Multiple Readers
 
         ScotHeartbeat hb;
-
         MessageOut msg_out;                     // Logger
+
+        // 
+        uint64_t rc_inline_max;
 
     public:
         ScotCore();

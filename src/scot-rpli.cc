@@ -140,7 +140,7 @@ bool scot::ScotReplicator::write_request(
                         reinterpret_cast<SCOT_LOGALIGN_T*>(
                                 uintptr_t(ctx.remote.rply_mr->addr) + offset);
 
-                    ret = hartebeest_rdma_post_single_fast(
+                    ret = hartebeest_rdma_post_single_signaled_inline(
                         ctx.local.rpli_qp,          // Local QP
                         header,                     // Local starting point of a RDMA message
                         remote_target_addr,         // To where at remote?

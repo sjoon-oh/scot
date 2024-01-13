@@ -82,7 +82,7 @@ bool scot::ScotChecker::write_request(
                 reinterpret_cast<struct ScotMessageHeader*>(header)->msg = 
                     SCOT_MSGTYPE_WAIT;
 
-                ret = hartebeest_rdma_post_single_fast(
+                ret = hartebeest_rdma_post_single_signaled_inline(
                     ctx.local.chkr_qp,          // Local QP (Checker)
                     header,                     // Local starting point of a RDMA message
                     remote_target_addr,         // To where at remote?
@@ -96,7 +96,7 @@ bool scot::ScotChecker::write_request(
                 reinterpret_cast<struct ScotMessageHeader*>(header)->msg = 
                     SCOT_MSGTYPE_HDRONLY;
 
-                ret = hartebeest_rdma_post_single_fast(
+                ret = hartebeest_rdma_post_single_signaled_inline(
                     ctx.local.chkr_qp,          // Local QP (Checker)
                     header,                     // Local starting point of a RDMA message
                     remote_target_addr,         // To where at remote?

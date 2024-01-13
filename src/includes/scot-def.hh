@@ -6,6 +6,7 @@
 // ID starts with 0, monotonically, at initialization..
 #define SCOT_ENVVAR_NID         "HARTEBEEST_NID"
 #define SCOT_ENVVAR_QSZ         "SCOT_QSIZE"
+#define SCOT_CONFPATH           "SCOT_CONF"
 
 #define SCOT_MAX_QSIZE          9
 

@@ -2,6 +2,7 @@
 #include <regex>
 #include <string>
 #include <iostream>
+#include <fstream>
 #include <vector>
 
 #include <utility>
@@ -13,8 +14,36 @@
 #include "./includes/scot-core.hh"
 
 // Configuration
-scot::ScotConfLoader::ScotConfLoader() {
+scot::ScotConfLoader::ScotConfLoader() : msg_out("scot-ldr") {
 
+    __SCOT_INFO__(msg_out, "Loading configuration.");
+
+    const char* path = getenv(SCOT_CONFPATH); 
+    
+    nlohmann::json configuration;
+    std::ifstream cf(path);
+
+    if (cf.fail())
+        assert(false);
+
+    cf >> configuration;
+
+    for (auto& elem: configuration.items()) {
+        confs.insert(
+            std::pair<std::string, uint64_t>(std::string(elem.key()), elem.value())
+        );
+        __SCOT_INFO__(msg_out, "Configuration set(SCOT): [{}, {}].", std::string(elem.key()), confs.at(std::string(elem.key())));
+    }
+}
+
+
+uint64_t scot::ScotConfLoader::get_confval(const char* key) {
+    if (confs.find(std::string(key)) == confs.end()) {
+        assert(false);
+        return 0;
+    }
+    else
+        return confs.at(std::string(key));
 }
 
 
@@ -35,7 +64,7 @@ scot::ScotReader::ScotReader(
 }
 
 
-scot::ScotCore::ScotCore() : msg_out("scot-core") {
+scot::ScotCore::ScotCore() : msg_out("scot-core"), rc_inline_max(0) {
 
     __SCOT_INFO__(msg_out, "Core init start.");
 
@@ -44,6 +73,8 @@ scot::ScotCore::ScotCore() : msg_out("scot-core") {
 
     nid = ScotConnection::get_instance().get_my_nid();
     qsize = ScotConnection::get_instance().get_quorum_sz();
+
+    rc_inline_max = ldr.get_confval("inline-max");
 
     rpli = new ScotReplicator(
             reinterpret_cast<SCOT_LOGALIGN_T*>(

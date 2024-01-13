@@ -23,6 +23,10 @@ export HARTEBEEST_PARTICIPANTS=0,1,2
 
 export HARTEBEEST_EXC_IP_PORT=143.248.39.169:9999
 export HARTEBEEST_CONF_PATH=${workspace_home}/config/qp.conf
+export SCOT_CONF=${workspace_home}/config/scot.conf
+
+printf "${normalc}Configuration file path(HB): `echo $HARTEBEEST_CONF_PATH`\n"
+printf "${normalc}Configuration file path(SCOT): `echo $SCOT_CONF`\n"
 
 export SCOT_QSIZE=3
 
