@@ -19,6 +19,11 @@ fi
 
 workspace_home=`pwd`
 
+export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$(pwd)/build/lib
+export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$(pwd)/hartebeest/build/lib
+
+printf "${normalc} LD_LIBRARY_PATH=$LD_LIBRARY_PATH\n"
+
 export HARTEBEEST_PARTICIPANTS=0,1,2
 # export HARTEBEEST_EXC_IP_PORT=143.248.39.61:9999
 

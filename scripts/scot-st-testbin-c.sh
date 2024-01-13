@@ -47,9 +47,8 @@ else
     usleep 300
 fi
 
-# numactl --membind 0 ./build/bin/scot-mt-testbin 16 4 4
-
-gdb ./build/bin/scot-mt-testbin
+# Payload size, Key size, (Total: Payload + Key)
+numactl --membind 0 ./build/bin/scot-st-testbin-c 24 8
 
 if [ "${HARTEBEEST_NID}" == "0" ]; then
     printf "${normalc}Killing Memcached at blanc...\n"
@@ -57,4 +56,25 @@ if [ "${HARTEBEEST_NID}" == "0" ]; then
     ssh oslab@143.248.39.169 "pkill -9 memcached"
 fi
 
+mkdir -p report
+mv *.csv ./report
+
+cd report
+# Rename all.
+
+find . -type f -name 'wrkr*' | while read FILE ; do
+    subst="s/wrkr/${scriptbn}-$(date +%F-%T)"-wrkr/
+    new_name="$(echo ${FILE} |sed -e ${subst})" ;
+    mv "${FILE}" "${new_name}" ;
+done 
+
 exit
+
+# gdb env: env ~~
+# set environment HARTEBEEST_NID=0
+# set environment HARTEBEEST_PARTICIPANTS=0,1,2
+# set environment HARTEBEEST_EXC_IP_PORT=143.248.39.169:9999
+# set environment HARTEBEEST_CONF_PATH=/home/oslab/sjoon/workspace/sjoon-git/scot/config/qp.conf
+# set environment SCOT_QSIZE=3
+
+

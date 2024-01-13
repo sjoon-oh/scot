@@ -12,8 +12,7 @@
 #include <cstdint>
 
 #include "./scot-def.hh"
-
-typedef uint32_t (*SCOT_RULEF_T)(uint32_t);
+#include "./scot-rule-c.h"
 
 namespace scot {
 
@@ -35,7 +34,7 @@ namespace scot {
         std::atomic_flag on_update;
 
     public:
-        ScotJudge() { on_update.clear(); };
+        ScotJudge() { on_update.clear(); rdict.clear(); };
         ~ScotJudge() = default;
 
         void update_active(T key) { active_rule = rdict.at(key); }

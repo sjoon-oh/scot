@@ -18,7 +18,9 @@ This document briefly describes the project. Author: Sukjoon Oh, [sjoon@kaist.ac
 
 ## Description
 
-
+<!-- 
+cmake . -DCMAKE_BUILD_TYPE=Debug
+ -->
 
 
 
