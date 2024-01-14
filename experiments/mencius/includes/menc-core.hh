@@ -28,8 +28,7 @@ namespace scot_menc {
         
         // External handle
         void allow_write();
-        bool is_slot_locked();
-        void slot_unlock();
+        bool try_write();
     };
 
 

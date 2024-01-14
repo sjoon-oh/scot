@@ -38,9 +38,7 @@ inline uint8_t do_skip(scot_menc::ScotMenciusReplicator* rpli, uint32_t nst) {
 
     // If there is something on going, 
     //  test_and_set() will return true, as the lock is held.
-    if (rpli->is_slot_locked() == 0) {
-
-        rpli->allow_write();
+    if (rpli->try_write() == 0) {
         rpli->write_request(dummy_buf, 3, dummy_buf, 1, 0, SCOT_MSGTYPE_HDRONLY);
 
         return SCOT_MENC_SKIPPER_SKIP;

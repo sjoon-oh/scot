@@ -60,16 +60,12 @@ bool scot_menc::ScotMenciusReplicator::write_request(
 
     SCOT_LOGALIGN_T* header;
     
-    // if (msg == SCOT_MSGTYPE_PURE)
-    if (msg != SCOT_MSGTYPE_HDRONLY)
-        __START_WRITE__ 
-    {
-        
-        // Wait for rply to call allow_write().
-        //  Gets the lock, but never releases.
-        
+    if (msg == SCOT_MSGTYPE_PURE)
         while (sugg_lock.test_and_set(std::memory_order_acquire))
             ;
+
+    __START_WRITE__ 
+    {
 
         // Am I marked as deleted? 
         // Or am I already replicated by prefetch?
@@ -153,12 +149,6 @@ void scot_menc::ScotMenciusReplicator::allow_write() {
 }
 
 
-bool scot_menc::ScotMenciusReplicator::is_slot_locked() {
-    return writer_lock.test_and_set(std::memory_order_acquire);
+bool scot_menc::ScotMenciusReplicator::try_write() {
+    return sugg_lock.test_and_set(std::memory_order_acquire);
 }
-
-
-void scot_menc::ScotMenciusReplicator::slot_unlock() {
-    writer_lock.clear(std::memory_order_release);
-}
-
