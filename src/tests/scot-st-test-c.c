@@ -13,10 +13,8 @@
 #include "../includes/scot-core-c.h"
 #include "../sample/scot-balance-rule-c.h"
 
-#define __DEBUG__X
-
 #ifdef __DEBUG__
-#define REQ_NUM     10000
+#define REQ_NUM     100
 #else
 #define REQ_NUM     1000000
 #endif

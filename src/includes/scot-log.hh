@@ -35,7 +35,7 @@ int scot_hash_cmp(void*, void*);
 
 namespace scot {
     class ScotLog {
-    private:
+    protected:
         uint32_t next_free;
         SCOT_LOGALIGN_T* log;
 

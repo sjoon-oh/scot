@@ -27,6 +27,7 @@
 #include "../includes/scot-rule.hh"
 
 namespace scot {
+
     class ScotConfLoader {
     private:
         // Local attributes
@@ -45,6 +46,7 @@ namespace scot {
 
         uint64_t get_confval(const char*);
     };
+    
 
     // Writer interface
     class ScotWriter {

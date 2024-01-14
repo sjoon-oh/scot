@@ -75,7 +75,6 @@ void scot::ScotReplayer::__worker(
         }
 
         rcvd->msg = SCOT_MSGTYPE_NONE;
-
     }
 }
 

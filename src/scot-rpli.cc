@@ -50,6 +50,7 @@ scot::ScotReplicator::ScotReplicator(SCOT_LOGALIGN_T* addr)
     : ScotWriter(addr), hasht(SCOT_HT_SIZE, scot_hash_cmp), msg_out("rpli") { 
 }
 
+
 bool scot::ScotReplicator::write_request(
     uint8_t* buf, uint16_t buf_sz, 
     uint8_t* key, uint16_t key_sz, 
