@@ -73,7 +73,7 @@ void worker(int nid, int tid, int gen_sz, int key_sz, scot_menc::ScotMenciusCore
         }
     }
 
-    sleep(20);
+    sleep(1);
 
     return;
 }

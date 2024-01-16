@@ -64,7 +64,8 @@
 #define SCOT_MSGTYPE_HDRONLY    0x08
 #define SCOT_MSGTYPE_COMMPREV   0x10
 
-#define SCOT_HT_SIZE            (1 << 20)
+// #define SCOT_HT_SIZE            (1 << 20)
+#define SCOT_HT_SIZE            (1 << 5)
 #define SCOT_HT_NBUCKET         (SCOT_HT_SIZE >> 3)
 
 // Worker Signals

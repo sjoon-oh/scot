@@ -78,7 +78,7 @@ bool scot_menc::ScotMenciusReplicator::write_request(
                 static_cast<size_t>(latest->buffer_sz) + sizeof(uint8_t);
 
             // Make this the first.
-            reinterpret_cast<struct ScotMessageHeader*>(header)->msg |= SCOT_MSGTYPE_COMMPREV;
+            // reinterpret_cast<struct ScotMessageHeader*>(header)->msg |= SCOT_MSGTYPE_COMMPREV;
 
             size_t offset = uintptr_t(header) - uintptr_t(log.get_base());
             SCOT_LOGALIGN_T* remote_target_addr;
@@ -113,6 +113,58 @@ bool scot_menc::ScotMenciusReplicator::write_request(
 
             //
             // Wait for else.
+            for (auto& ctx: scot::ScotConnection::get_instance().get_quorum()) {
+                ret = hartebeest_rdma_send_poll(ctx.local.rpli_qp);
+#ifdef __DEBUG__
+                if (!ret) {
+                    __SCOT_INFO__(msg_out, "→→ Polling error.");
+                    assert(0);
+                }
+#endif
+            }
+
+            // First suggest ended.
+            uint8_t learn_buf[3] = { 'C', 'B', 'A' };
+            ScotSlotEntry learn_slot = {
+                .next       = nullptr,
+                .hashv      = 0,
+                .ready      = 1,
+                .blocked    = 1,
+                .buffer     = learn_buf,
+                .buffer_sz  = 3,
+                .key        = learn_buf,
+                .key_sz     = 1,
+                .msg        = (SCOT_MSGTYPE_ACK | SCOT_MSGTYPE_COMMPREV)
+            };
+        
+            header = log.write_local_log(&learn_slot); // At least, replicate this one.
+            logsz = sizeof(struct ScotMessageHeader) + 
+                static_cast<size_t>(learn_slot.buffer_sz) + sizeof(uint8_t);
+
+            offset = uintptr_t(header) - uintptr_t(log.get_base());
+
+            // 
+            // Send WR first for all quorums
+            for (auto& ctx: scot::ScotConnection::get_instance().get_quorum()) {
+                
+                remote_target_addr = 
+                    reinterpret_cast<SCOT_LOGALIGN_T*>(
+                            uintptr_t(ctx.remote.rply_mr->addr) + offset);
+
+                ret = hartebeest_rdma_post_single_signaled_inline(
+                    ctx.local.rpli_qp,          // Local QP
+                    header,                     // Local starting point of a RDMA message
+                    remote_target_addr,         // To where at remote?
+                    logsz,                      // Total message size
+                    IBV_WR_RDMA_WRITE,
+                    ctx.local.rpli_mr->lkey,    // Local MR acces key
+                    ctx.remote.rply_mr->rkey,   // Remote MR access key
+                    ctx.nid);
+#ifdef __DEBUG__
+                assert(ret != false);
+#endif
+            }
+
             for (auto& ctx: scot::ScotConnection::get_instance().get_quorum()) {
                 ret = hartebeest_rdma_send_poll(ctx.local.rpli_qp);
 #ifdef __DEBUG__

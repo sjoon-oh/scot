@@ -47,7 +47,7 @@ void worker(int nid, int tid, int gen_sz, int key_sz, scot::ScotCore& core_insta
     uint32_t hashv;
     sleep(3); // Wait for a bit.
 
-    if (nid == 0) {
+    if (nid == 1) {
         for (int i = 0; i < REQ_NUM; i++) {
 
             // Propose
@@ -58,7 +58,7 @@ void worker(int nid, int tid, int gen_sz, int key_sz, scot::ScotCore& core_insta
             core_instance.propose(
                 (uint8_t*)static_buffer, gen_sz, 
                 (uint8_t*)static_buffer, key_sz, 
-                0
+                1
             );
             ts.record_end(index);
 

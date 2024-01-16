@@ -98,10 +98,10 @@ void scot_menc::ScotMenciusReplayer::__worker(
 
         // End point, whether it is pure, or ACKed.
         rcvd = reinterpret_cast<struct ScotMessageHeader*>(
-            log->poll_next_local_log(SCOT_MSGTYPE_PURE | SCOT_MSGTYPE_HDRONLY)
+            log->poll_next_local_log(SCOT_MSGTYPE_PURE | SCOT_MSGTYPE_HDRONLY | SCOT_MSGTYPE_ACK)
         );
 
-        if (skip_active) {
+        if (skip_active && ((rcvd->msg & SCOT_MSGTYPE_ACK) | (rcvd->msg & SCOT_MSGTYPE_HDRONLY))) {
             if (do_skip(rpli, delay) == SCOT_MENC_SKIPPER_SKIP) {
 #ifdef __DEBUG__
                 __SCOT_INFO__(lc_out, "→ Sending skip messages.");

@@ -85,6 +85,7 @@ bool scot::ScotReplicator::write_request(
     __START_WRITE__ {
 
         latest = __ht_get_latest_entry(curr);
+        // latest = curr;
 
         // Am I marked as deleted? 
         // Or am I already replicated by prefetch?
