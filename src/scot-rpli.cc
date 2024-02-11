@@ -46,8 +46,9 @@ struct ScotSlotEntry* scot::ScotReplicator::ScotReplicator::__ht_get_latest_entr
 }
 
 
-scot::ScotReplicator::ScotReplicator(SCOT_LOGALIGN_T* addr) 
-    : ScotWriter(addr), hasht(SCOT_HT_SIZE, scot_hash_cmp), msg_out("rpli") { 
+scot::ScotReplicator::ScotReplicator(SCOT_LOGALIGN_T* addr, uint32_t ps)
+    : ScotWriter(addr), hasht(SCOT_HT_SIZE, scot_hash_cmp), msg_out("rpli"), pf_size(ps) { 
+
 }
 
 
@@ -95,7 +96,6 @@ bool scot::ScotReplicator::write_request(
 
                 // Set prefetch size here.
                 // Dead nodes will be notified by quroum_conns.
-                size_t pf_size = ScotConnection::get_instance().get_quorum().size() + 1;
                 size_t logsz = 0, pf_logsz = 0;
 
                 header = log.write_local_log(latest); // At least, replicate this one.

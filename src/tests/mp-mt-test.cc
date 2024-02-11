@@ -35,7 +35,7 @@ void worker(int nid, int tid, int gen_sz, int key_sz, scot::ScotCore& core_insta
     
     scot::MessageOut m_out(logger_name.c_str());
 
-    char static_buffer[4096] = { 0, };
+    char* static_buffer[REQ_NUM] = { 0, };
 
     m_out.get_logger()->info("{} spawned.", logger_name);
 
@@ -44,30 +44,31 @@ void worker(int nid, int tid, int gen_sz, int key_sz, scot::ScotCore& core_insta
 
     scot::ScotTimestamp ts(logger_name + ".csv");
 
+    for (int i = 0; i < REQ_NUM; i++) {
+        static_buffer[i] = new char[4096];
+        std::memset(static_buffer[i], 0, 4096);
+
+        generate_random_str(generator, static_buffer[i], gen_sz);
+    }
+
     uint32_t hashv;
     sleep(3); // Wait for a bit.
 
     if (nid == 1) {
         for (int i = 0; i < REQ_NUM; i++) {
 
-            // Propose
-            generate_random_str(generator, static_buffer, gen_sz);
-            // hashv = hm(std::string(static_buffer));
-
             uint64_t index = ts.record_start();
             core_instance.propose(
-                (uint8_t*)static_buffer, gen_sz, 
-                (uint8_t*)static_buffer, key_sz, 
+                (uint8_t*)(static_buffer[i]), gen_sz, 
+                (uint8_t*)(static_buffer[i]), key_sz, 
                 1
             );
             ts.record_end(index);
 
-            std::memset(static_buffer, 0, 4096);
-
-            if (i % 50000 == 0) {
-                float perc = ((i * 100) / REQ_NUM);
-                m_out.get_logger()->info("PROPOSE: {:03.2f}%", perc);
-            }
+            // if (i % 50000 == 0) {
+            //     float perc = ((i * 100) / REQ_NUM);
+            //     m_out.get_logger()->info("PROPOSE: {:03.2f}%", perc);
+            // }
         }
 
 #if(REQ_NUM < 100000)
@@ -76,6 +77,9 @@ void worker(int nid, int tid, int gen_sz, int key_sz, scot::ScotCore& core_insta
     }
     else
        sleep(20);
+
+    for (int i = 0; i < REQ_NUM; i++)
+        delete[] static_buffer[i];
 
     return;
 }

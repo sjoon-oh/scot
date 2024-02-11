@@ -78,12 +78,15 @@ scot::ScotCore::ScotCore() : msg_out("scot-core"), rc_inline_max(0) {
     nid = ScotConnection::get_instance().get_my_nid();
     qsize = ScotConnection::get_instance().get_quorum_sz();
 
+    // Configuration value settings
     rc_inline_max = ldr.get_confval("inline-max");
+    prefetch_size = ldr.get_confval("prefetch-size");
 
     rpli = new ScotReplicator(
             reinterpret_cast<SCOT_LOGALIGN_T*>(
                 hartebeest_get_local_mr(
-                    HBKEY_PD, wkey_helper(HBKEY_MR_RPLI).c_str())->addr)
+                    HBKEY_PD, wkey_helper(HBKEY_MR_RPLI).c_str())->addr),
+            prefetch_size
     );
     
     __SCOT_INFO__(msg_out, "→ A Replicator initiated: 0x{:x}", uintptr_t(rpli));

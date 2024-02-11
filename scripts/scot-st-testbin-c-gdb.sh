@@ -40,7 +40,7 @@ if [ "${HARTEBEEST_NID}" == "0" ]; then
     printf "${normalc}Starting Memcached at blanc...\n"
 
     ssh oslab@143.248.39.169 "pkill -9 memcached"
-    usleep 10
+    usleep 50
 
     ssh oslab@143.248.39.169 "memcached -p 9999 &" &
 else

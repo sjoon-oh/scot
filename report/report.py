@@ -27,6 +27,8 @@ for fname in targets:
             lines = (line for line in lines if line)
             lines = [float(line.rstrip()) for line in lines]
 
+            lines.sort()
+
             reqs = len(lines)
 
             avg = numpy.mean(lines)

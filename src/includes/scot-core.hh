@@ -87,8 +87,10 @@ namespace scot {
         void __ht_try_insert(struct ScotSlotEntry*);
         struct ScotSlotEntry* __ht_get_latest_entry(struct ScotSlotEntry*);
 
+        uint32_t pf_size;
+
     public:
-        ScotReplicator(SCOT_LOGALIGN_T*);
+        ScotReplicator(SCOT_LOGALIGN_T*, uint32_t);
         virtual ~ScotReplicator() = default;
 
         bool write_request(uint8_t*, uint16_t, uint8_t*, uint16_t, uint32_t, uint8_t);
@@ -173,6 +175,7 @@ namespace scot {
 
         // 
         uint64_t rc_inline_max;
+        uint32_t prefetch_size;
 
     public:
         ScotCore();

@@ -6,9 +6,55 @@ workspace_home=`basename $(pwd)`
 warning='\033[0;31m[WARNING]\033[0m '
 normalc='\033[0;32m[MESSAGE]\033[0m '
 
-args=$@
+# args=$@
 scriptbn=$(basename "$0" .sh)
-printf "${normalc}${scriptbn} arguments: ${args}\n"
+args=$(getopt -o k:p:t:h --long keysz:,paysz:,threads:,help -- "$@")
+
+print_help() {
+	echo "Usage : $0 -k <key_sz> -p <paysz> -t <threads> "
+}
+
+if [[ $? -gt 0 ]]; then
+    print_help
+    exit
+fi
+
+eval set -- ${args}
+while true; do
+    case $1 in
+        -k | --keysz)
+            shift; argval=$1; # Move to the argument
+                # Do something here
+                keysz=${argval}
+            shift; continue
+            ;;
+        -p | --paysz)
+            shift; argval=$1; # Move to the argument
+                # Do something here
+                paysz=${argval}
+            shift; continue
+            ;;
+        -t | --threads)
+            shift; argval=$1; # Move to the argument
+                # Do something here
+                threads=${argval}
+            shift; continue
+            ;;
+        -h | --help)
+                print_help
+            shift; continue
+            ;;
+        --) 
+            shift; break
+            ;;
+        --*)
+                printf "Invalid option: $1"
+                print_help;
+            ;;
+    esac
+done
+
+printf "${normalc} Key size: ${keysz}, Payload size: ${paysz}, Threads: ${threads}\n"
 
 #
 # Setting proj home
@@ -40,7 +86,7 @@ if [ "${HARTEBEEST_NID}" == "0" ]; then
     printf "${normalc}Starting Memcached at blanc...\n"
 
     ssh oslab@143.248.39.169 "pkill -9 memcached"
-    usleep 10
+    usleep 50
 
     ssh oslab@143.248.39.169 "memcached -p 9999 &" &
 else
@@ -48,7 +94,7 @@ else
 fi
 
 # Payload size, Key size, (Total: Payload + Key), Thread number
-numactl --membind 0 ./build/bin/scot-mt-testbin-skew 24 8 1
+numactl --membind 0 ./build/bin/scot-mt-testbin-skew ${paysz} ${keysz} ${threads}
 
 if [ "${HARTEBEEST_NID}" == "0" ]; then
     printf "${normalc}Killing Memcached at blanc...\n"
@@ -62,11 +108,21 @@ mv *.csv ./report
 cd report
 # Rename all.
 
+fname_date=$(date +%F-%T)
+aggr_name=${scriptbn}-${fname_date}-wrkr-aggregate.csv
+
+rm ${aggr_name}
+
 find . -type f -name 'wrkr*' | while read FILE ; do
-    subst="s/wrkr/${scriptbn}-$(date +%F-%T)"-wrkr/
+    subst="s/wrkr/${scriptbn}-${fname_date}"-wrkr/
     new_name="$(echo ${FILE} |sed -e ${subst})" ;
+
+    cat ${FILE} >> ${aggr_name}
+
     mv "${FILE}" "${new_name}" ;
-done 
+done
+
+python3 report.py
 
 exit
 

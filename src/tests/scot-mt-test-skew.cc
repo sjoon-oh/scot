@@ -7,6 +7,7 @@
 #include <vector>
 
 #include <functional>
+#include <cstdlib>
 
 #include "../sample/scot-balance-rule.hh"
 #include "../includes/scot-core.hh"
@@ -28,14 +29,15 @@ void generate_random_str(std::mt19937& generator, char* buffer, int len) {
         buffer[i] = character_set[static_cast<char>(distributor(generator))];
 }
 
-void worker(int nid, int tid, int gen_sz, int key_sz, scot::ScotCore& core_instance) {
+void worker(int nid, int tid, int gen_sz, int key_sz, int req_num, scot::ScotCore& core_instance) {
 
     std::string logger_name("wrkr-");
     logger_name += std::to_string(tid);
     
     scot::MessageOut m_out(logger_name.c_str());
 
-    char static_buffer[4096] = { 0, };
+    char** static_buffer = (char**)std::malloc(sizeof(char*) * req_num);
+    uint32_t* hashv = (uint32_t*)std::malloc(sizeof(uint32_t) * req_num);
 
     m_out.get_logger()->info("{} spawned.", logger_name);
 
@@ -43,65 +45,49 @@ void worker(int nid, int tid, int gen_sz, int key_sz, scot::ScotCore& core_insta
     std::hash<std::string> hm;
 
     scot::ScotTimestamp ts(logger_name + ".csv");
+    scot::ScotTimestamp ts_runtime(logger_name + "-runtime.csv");
 
-    uint32_t hashv;
+    for (int i = 0; i < req_num; i++) {
+        char* buffer = (char*)std::malloc(sizeof(char) * 4096);
+        std::memset(buffer, 0, 4096);
+
+        generate_random_str(generator, buffer, gen_sz);
+        hashv[i] = hm(std::string(buffer));
+        hashv[i] = hashv[i] << 1;
+
+        static_buffer[i] = buffer;
+    }
+
+    m_out.get_logger()->info("Payload generated.");
+
     sleep(3); // Wait for a bit.
 
-/*
-    if (nid == 0) {
-        for (int i = 0; i < REQ_NUM; i++) {
-
-            // Propose
-            generate_random_str(generator, static_buffer, gen_sz);
-            hashv = hm(std::string(static_buffer));
-
-            uint64_t index = ts.record_start();
-            core_instance.propose(
-                (uint8_t*)static_buffer, gen_sz, 
-                (uint8_t*)static_buffer, key_sz, 
-                hashv
-            );
-            ts.record_end(index);
-
-            std::memset(static_buffer, 0, 4096);
-
-            if (i % 50000 == 0) {
-                float perc = ((i * 100) / REQ_NUM);
-                m_out.get_logger()->info("PROPOSE: {:03.2f}%", perc);
-            }
-        }
-
-#if(REQ_NUM < 100000)
-        sleep(5);
-#endif
-    }
-    else
-        sleep(10);
-*/
-
-    for (int i = 0; i < REQ_NUM; i++) {
-
-        // Propose
-        generate_random_str(generator, static_buffer, gen_sz);
-        hashv = hm(std::string(static_buffer));
+    uint64_t rt_index = ts_runtime.record_start();
+    for (int i = 0; i < req_num; i++) {
 
         uint64_t index = ts.record_start();
         core_instance.propose(
-            (uint8_t*)static_buffer, gen_sz, 
-            (uint8_t*)static_buffer, key_sz, 
-            1
+            (uint8_t*)(static_buffer[i]), gen_sz, 
+            (uint8_t*)(static_buffer[i]), key_sz, 
+            hashv[i]
         );
         ts.record_end(index);
 
-        std::memset(static_buffer, 0, 4096);
-
-        if (i % 50000 == 0) {
-            float perc = ((i * 100) / REQ_NUM);
-            m_out.get_logger()->info("PROPOSE: {:03.2f}%", perc);
-        }
+        // if (i % 50000 == 0) {
+        //     float perc = ((i * 100) / REQ_NUM);
+        //     m_out.get_logger()->info("PROPOSE: {:03.2f}%", perc);
+        // }
     }
+    ts_runtime.record_end(rt_index);
 
     sleep(20);
+
+    for (int i = 0; i < req_num; i++) {
+        free(static_buffer[i]);
+    }
+
+    free(static_buffer);
+    free(hashv);
 
     return;
 }
@@ -137,6 +123,8 @@ int main(int argc, char* argv[]) {
         thr_vec.push_back(std::move(
             std::thread(worker, nid, i, (pld_sz + key_sz), key_sz, std::ref(scot_instance))));
     }
+
+    std::cout << "Waiting for join.\n";
 
     for (auto& thr: thr_vec) thr.join();
 

@@ -41,20 +41,6 @@ if [ "${HARTEBEEST_NID}" == "0" ]; then
 
     ssh oslab@143.248.39.169 "pkill -9 memcached"
     usleep 50
-
-    ssh oslab@143.248.39.169 "memcached -p 9999 &" &
 else
     usleep 300
 fi
-
-# numactl --membind 0 ./build/bin/scot-mt-testbin 16 4 4
-
-gdb ./build/bin/scot-mt-testbin
-
-if [ "${HARTEBEEST_NID}" == "0" ]; then
-    printf "${normalc}Killing Memcached at blanc...\n"
-    sleep 5
-    ssh oslab@143.248.39.169 "pkill -9 memcached"
-fi
-
-exit
