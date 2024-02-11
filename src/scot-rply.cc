@@ -7,6 +7,7 @@
 #include <string>
 #include <iostream>
 #include <vector>
+#include <queue>
 
 #include <utility>
 
@@ -48,6 +49,13 @@ void scot::ScotReplayer::__worker(
     struct ScotMessageHeader* rcvd;
     SCOT_LOG_FINEGRAINED_T* pyld;
 
+    struct ReplayPair {
+        SCOT_LOG_FINEGRAINED_T* buffer;
+        size_t buffer_len;
+    };
+
+    std::queue<struct ReplayPair> replay_queue;
+
     while (1) {
 
         // Pause when signaled.
@@ -64,6 +72,12 @@ void scot::ScotReplayer::__worker(
         if (rcvd->msg & SCOT_MSGTYPE_ACK) {
             chkr->release_wait(rcvd->hashv);
         }
+
+        // Push to queue.
+        replay_queue.push({
+            .buffer = pyld,
+            .buffer_len = rcvd->buf_sz
+        });
 
         if (rcvd->msg & SCOT_MSGTYPE_COMMPREV) {
             

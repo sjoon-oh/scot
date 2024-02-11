@@ -52,6 +52,11 @@ scot::ScotReplicator::ScotReplicator(SCOT_LOGALIGN_T* addr, uint32_t ps)
 }
 
 
+uint32_t scot::ScotReplicator::ScotReplicator::hash(char* buf, int buf_len) {
+    return hasht.hash(buf, buf_len);
+}
+
+
 bool scot::ScotReplicator::write_request(
     uint8_t* buf, uint16_t buf_sz, 
     uint8_t* key, uint16_t key_sz, 

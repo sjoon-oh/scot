@@ -55,6 +55,11 @@ void scot_update_active(uint32_t key) {
 }
 
 
+uint32_t scot_hash(char* buf, int buf_len) {
+    return __scot_instance->hash(buf, buf_len);
+}
+
+
 int scot_propose(
     uint8_t* buf, uint16_t buf_sz, uint8_t* key, uint16_t key_sz, 
     uint32_t hashv) {

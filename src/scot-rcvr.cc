@@ -66,6 +66,8 @@ void scot::ScotReceiver::__worker(
                 pyld, rcvd->buf_sz, nullptr, 0, rcvd->hashv, SCOT_MSGTYPE_ACK
             );
 
+            // Do replay here.
+
 #ifdef __DEBUG__
             uint32_t received_hash = rcvd->hashv;
             __SCOT_INFO__(lc_out, "→ Replying as ACK: {}", received_hash);

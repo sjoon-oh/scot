@@ -151,6 +151,11 @@ scot::ScotCore::~ScotCore() {
 }
 
 
+uint32_t scot::ScotCore::hash(char* buf, int buf_len) {
+    return rpli->hash(buf, buf_len);
+}
+
+
 int scot::ScotCore::propose(
     uint8_t* buf, uint16_t buf_sz, uint8_t* key, uint16_t key_sz, 
     uint32_t hashv) {

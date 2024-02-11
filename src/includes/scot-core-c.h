@@ -19,6 +19,7 @@ uint32_t scot_get_nid();
 void scot_add_rule(uint32_t, SCOT_RULEF_T);
 void scot_update_active(uint32_t);
 
+uint32_t scot_hash(char*, int);
 int scot_propose(uint8_t*, uint16_t, uint8_t*, uint16_t, uint32_t);
 
 // Timestamp related

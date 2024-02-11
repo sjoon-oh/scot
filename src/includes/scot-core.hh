@@ -93,6 +93,8 @@ namespace scot {
         ScotReplicator(SCOT_LOGALIGN_T*, uint32_t);
         virtual ~ScotReplicator() = default;
 
+        uint32_t hash(char*, int);
+
         bool write_request(uint8_t*, uint16_t, uint8_t*, uint16_t, uint32_t, uint8_t);
     };
 
@@ -188,6 +190,7 @@ namespace scot {
         void add_rule(uint32_t, SCOT_RULEF_T);
         void update_active(uint32_t);
         
+        uint32_t hash(char*, int);
         int propose(uint8_t*, uint16_t, uint8_t*, uint16_t, uint32_t);
 
         uint32_t get_nid();

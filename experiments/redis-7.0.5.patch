@@ -1,5 +1,5 @@
 diff --git a/src/Makefile b/src/Makefile
-index e4f7d90..9f8cc96 100644
+index e4f7d90..7faacb4 100644
 --- a/src/Makefile
 +++ b/src/Makefile
 @@ -117,7 +117,7 @@ endif
@@ -7,46 +7,51 @@ index e4f7d90..9f8cc96 100644
  FINAL_CFLAGS=$(STD) $(WARN) $(OPT) $(DEBUG) $(CFLAGS) $(REDIS_CFLAGS)
  FINAL_LDFLAGS=$(LDFLAGS) $(REDIS_LDFLAGS) $(DEBUG)
 -FINAL_LIBS=-lm
-+FINAL_LIBS=-lm -lhartebeest -lrsdco
++FINAL_LIBS=-lm -lhartebeest -lscot
  DEBUG=-g -ggdb
  
  # Linux ARM32 needs -latomic at linking time
 diff --git a/src/server.c b/src/server.c
-index b0cef88..2ed9898 100644
+index b0cef88..a1a23a7 100644
 --- a/src/server.c
 +++ b/src/server.c
-@@ -70,6 +70,11 @@
+@@ -70,6 +70,15 @@
  #include <sys/sysctl.h>
  #endif
  
-+#include "../../../src/includes/rsdco.h"
++// Scot-Redis Integration
++#include "../../../src/includes/scot-core-c.h"
++#include "../../../src/sample/scot-balance-rule-c.h"
 +
 +#include <pthread.h>
++
 +pthread_mutex_t call_lock = PTHREAD_MUTEX_INITIALIZER;
++int ts_handle;
 +
  /* Our shared "common" objects */
  
  struct sharedObjectsStruct shared;
-@@ -1162,6 +1167,9 @@ void cronUpdateMemoryStats() {
-  */
+@@ -1167,6 +1176,9 @@ int serverCron(struct aeEventLoop *eventLoop, long long id, void *clientData) {
+     UNUSED(id);
+     UNUSED(clientData);
  
- int serverCron(struct aeEventLoop *eventLoop, long long id, void *clientData) {
-+
++    // Scot-Redis Integration
 +    pthread_mutex_lock(&call_lock);
 +
-     int j;
-     UNUSED(eventLoop);
-     UNUSED(id);
-@@ -1420,6 +1428,8 @@ int serverCron(struct aeEventLoop *eventLoop, long long id, void *clientData) {
+     /* Software watchdog: deliver the SIGALRM that will reach the signal
+      * handler if we don't return here fast enough. */
+     if (server.watchdog_period) watchdogScheduleSignal(server.watchdog_period);
+@@ -1420,6 +1432,9 @@ int serverCron(struct aeEventLoop *eventLoop, long long id, void *clientData) {
                            0,
                            &ei);
  
++    // Scot-Redis Integration
 +    pthread_mutex_unlock(&call_lock);
 +
      server.cronloops++;
      return 1000/server.hz;
  }
-@@ -3282,6 +3292,8 @@ void call(client *c, int flags) {
+@@ -3282,6 +3297,8 @@ void call(client *c, int flags) {
      uint64_t client_old_flags = c->flags;
      struct redisCommand *real_cmd = c->realcmd;
  
@@ -55,7 +60,7 @@ index b0cef88..2ed9898 100644
      /* Initialization: clear the flags that must be set by the command on
       * demand, and initialize the array for additional commands propagation. */
      c->flags &= ~(CLIENT_FORCE_AOF|CLIENT_FORCE_REPL|CLIENT_PREVENT_PROP);
-@@ -3480,6 +3492,8 @@ void call(client *c, int flags) {
+@@ -3480,6 +3497,8 @@ void call(client *c, int flags) {
      }
  
      server.core_propagates = prev_core_propagates;
@@ -64,112 +69,21 @@ index b0cef88..2ed9898 100644
  }
  
  /* Used when a command that is ready for execution needs to be rejected, due to
-@@ -3938,6 +3952,22 @@ int processCommand(client *c) {
-         return C_OK;       
-     }
- 
-+    uint32_t hashed;
-+    if (is_write_command) {
-+
-+        if (strcmp(c->argv[0]->ptr, "HMSET") == 0)
-+            hashed = rsdco_hash(c->argv[1]->ptr, strlen(c->argv[1]->ptr));
-+
-+        else if (strcmp(c->argv[0]->ptr, "ZADD") == 0)
-+            hashed = rsdco_hash(c->argv[3]->ptr, strlen(c->argv[3]->ptr));
-+
-+        rsdco_add_request(
-+            c->querybuf, sdslen(c->querybuf),
-+            NULL, 0, hashed,
-+            rsdco_rule_balanced
-+        );
-+    }
-+
-     /* Exec the command */
-     if (c->flags & CLIENT_MULTI &&
-         c->cmd->proc != execCommand &&
-@@ -4016,6 +4046,8 @@ void closeListeningSockets(int unlink_unix_socket) {
- int prepareForShutdown(int flags) {
-     if (isShutdownInitiated()) return C_ERR;
- 
-+    rsdco_dump_timestamps();
-+
-     /* When SHUTDOWN is called while the server is loading a dataset in
-      * memory we need to make sure no attempt is performed to save
-      * the dataset on shutdown (otherwise it could overwrite the current DB
-@@ -6236,6 +6268,8 @@ int changeListenPort(int port, socketFds *sfd, aeFileProc *accept_handler) {
- static void sigShutdownHandler(int sig) {
-     char *msg;
- 
-+    rsdco_dump_timestamps();
-+
-     switch (sig) {
-     case SIGINT:
-         msg = "Received SIGINT scheduling shutdown...";
-@@ -6775,11 +6809,68 @@ redisTestProc *getTestProcByName(const char *name) {
- }
- #endif
- 
-+// Replay function
-+void rscdo_redis_replay(void* buf, uint16_t bufsz) {
-+
-+    int tokn, j;
-+    client* fake_client = createClient(NULL); // Unconnected client
-+
-+    fake_client->flags = CLIENT_SCRIPT | CLIENT_DENY_BLOCKING;
-+
-+    sdsfree(fake_client->querybuf);
-+    fake_client->querybuf = sdsnewlen(buf, bufsz);
-+
-+    processMultibulkBuffer(fake_client);
-+
-+    fake_client->cmd = fake_client->lastcmd = fake_client->realcmd = lookupCommand(fake_client->argv, fake_client->argc);
-+    
-+    pthread_mutex_lock(&call_lock);
-+    fake_client->cmd->proc(fake_client);
-+    pthread_mutex_unlock(&call_lock);
-+
-+    sdsfree(fake_client->querybuf);
-+    listRelease(fake_client->reply);
-+    dictRelease(fake_client->bpop.keys);
-+    listRelease(fake_client->watched_keys);
-+
-+    dictRelease(fake_client->pubsub_channels);
-+    listRelease(fake_client->pubsub_patterns);
-+    dictRelease(fake_client->pubsubshard_channels);
-+
-+    zfree(fake_client->buf);
-+    freeClientArgv(fake_client);
-+    freeClientOriginalArgv(fake_client);
-+
-+    if (fake_client->deferred_reply_errors)
-+        listRelease(fake_client->deferred_reply_errors);
-+
-+    if (fake_client->mem_usage_bucket) {
-+        fake_client->mem_usage_bucket->mem_usage_sum -= fake_client->last_memory_usage;
-+        listDelNode(fake_client->mem_usage_bucket->clients, fake_client->mem_usage_bucket_node);
-+    }
-+
-+    freeClientMultiState(fake_client);
-+    sdsfree(fake_client->peerid);
-+    sdsfree(fake_client->sockname);
-+    sdsfree(fake_client->slave_addr);
-+
-+    zfree(fake_client);
-+}
-+
- int main(int argc, char **argv) {
-     struct timeval tv;
+@@ -6780,6 +6799,18 @@ int main(int argc, char **argv) {
      int j;
      char config_from_stdin = 0;
  
-+    rsdco_connector_init();
++    // Scot-Redis Integration
++    scot_initialize();
 +
-+    rsdco_local_hotel_init();
++    rule_balance_init_c(scot_get_qs());
 +
-+    rsdco_remote_writer_hotel_init();
-+    rsdco_remote_receiver_hotel_init();
++    scot_add_rule(2, rule_balance_2_c);
++    scot_add_rule(3, rule_balance_3_c);
 +
-+    rsdco_spawn_receiver(rscdo_redis_replay);
++    scot_update_active(3);
++
++    ts_handle = scot_timestamp_init("scot-redis");
 +
  #ifdef REDIS_TEST
      if (argc >= 3 && !strcasecmp(argv[1], "test")) {
