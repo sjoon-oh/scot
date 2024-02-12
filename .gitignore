@@ -48,3 +48,6 @@ install_manifest.txt
 compile_commands.json
 CTestTestfile.cmake
 _deps
+
+experiments/redis-7.0.5
+experiments/memcached-1.5.19
