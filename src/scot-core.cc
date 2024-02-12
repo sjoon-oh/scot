@@ -68,7 +68,7 @@ scot::ScotReader::ScotReader(
 }
 
 
-scot::ScotCore::ScotCore() : msg_out("scot-core"), rc_inline_max(0) {
+scot::ScotCore::ScotCore(SCOT_USRACTION ext_func) : msg_out("scot-core"), rc_inline_max(0) {
 
     __SCOT_INFO__(msg_out, "Core init start.");
 
@@ -105,7 +105,7 @@ scot::ScotCore::ScotCore() : msg_out("scot-core"), rc_inline_max(0) {
         mr = hartebeest_get_local_mr(HBKEY_PD, rkey_helper(HBKEY_MR_RPLY, nid, ctx.nid).c_str());
         vec_rply.push_back(
             new ScotReplayer(
-                reinterpret_cast<SCOT_LOGALIGN_T*>(mr->addr), ctx.nid, chkr)
+                reinterpret_cast<SCOT_LOGALIGN_T*>(mr->addr), ctx.nid, chkr, ext_func)
         );
 
         vec_rply.back()->worker_spawn();
@@ -118,13 +118,16 @@ scot::ScotCore::ScotCore() : msg_out("scot-core"), rc_inline_max(0) {
         mr = hartebeest_get_local_mr(HBKEY_PD, rkey_helper(HBKEY_MR_RCVR, nid, ctx.nid).c_str());
         vec_rcvr.push_back(
             new ScotReceiver(
-                reinterpret_cast<SCOT_LOGALIGN_T*>(mr->addr), ctx.nid, rpli)
+                reinterpret_cast<SCOT_LOGALIGN_T*>(mr->addr), ctx.nid, rpli, ext_func)
         );
 
         vec_rcvr.back()->worker_spawn();
     }
 
     __SCOT_INFO__(msg_out, "→ All Receivers spawned.");
+    
+    if (ext_func != nullptr)
+        __SCOT_INFO__(msg_out, "→ Replay function registered.");
 
     for (auto& rply: vec_rply) {
         rply->worker_signal_toggle(SCOT_WRKR_PAUSE); // Disable pause

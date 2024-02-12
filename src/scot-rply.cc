@@ -18,8 +18,8 @@
 #include "./includes/scot-core.hh"
 
 
-scot::ScotReplayer::ScotReplayer(SCOT_LOGALIGN_T* addr, uint32_t rply_id, scot::ScotChecker* chkr_unlock) 
-    : ScotReader(addr), worker(), worker_signal(0), id(rply_id), chkr(chkr_unlock) { 
+scot::ScotReplayer::ScotReplayer(SCOT_LOGALIGN_T* addr, uint32_t rply_id, scot::ScotChecker* chkr_unlock, SCOT_USRACTION ext_func) 
+    : ScotReader(addr), worker(), worker_signal(0), id(rply_id), chkr(chkr_unlock), user_action(ext_func) { 
 
     worker_signal_toggle(SCOT_WRKR_PAUSE);
 }
@@ -32,7 +32,7 @@ scot::ScotReplayer::~ScotReplayer() {
 
 #define IS_SIGNALED(SIGN)   (worker_signal & SIGN)
 void scot::ScotReplayer::__worker(
-    struct ScotLog* log, uint32_t rply_id, scot::ScotChecker* chkr) {
+    struct ScotLog* log, uint32_t rply_id, scot::ScotChecker* chkr, SCOT_USRACTION ext_func) {
 
     std::string lc_name_out("rply-");
     lc_name_out += std::to_string(rply_id);
@@ -82,6 +82,18 @@ void scot::ScotReplayer::__worker(
         if (rcvd->msg & SCOT_MSGTYPE_COMMPREV) {
             
             // Replay function goes here.
+            if (ext_func != nullptr) {
+                
+                while (!replay_queue.empty()) {
+                    SCOT_LOG_FINEGRAINED_T* rep_buf = replay_queue.front().buffer;
+                    size_t rep_buflen = replay_queue.front().buffer_len;
+
+                    // Run.
+                    ext_func(rep_buf, rep_buflen);
+
+                    replay_queue.pop();
+                }
+            }
 
 #ifdef __DEBUG__
             __SCOT_INFO__(lc_out, "→ Commit piggybacked. Safe to replay.");

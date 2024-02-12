@@ -26,6 +26,9 @@
 #include "../includes/scot-eval.hh"
 #include "../includes/scot-rule.hh"
 
+// User action
+typedef void (*SCOT_USRACTION)(void*, size_t);
+
 namespace scot {
 
     class ScotConfLoader {
@@ -125,11 +128,12 @@ namespace scot {
 
         uint32_t id;
         ScotChecker* chkr;
+        SCOT_USRACTION user_action;
 
-        void __worker(struct ScotLog*, uint32_t, ScotChecker*);
+        void __worker(struct ScotLog*, uint32_t, ScotChecker*, SCOT_USRACTION = nullptr);
 
     public:
-        ScotReplayer(SCOT_LOGALIGN_T*, uint32_t, ScotChecker*);
+        ScotReplayer(SCOT_LOGALIGN_T*, uint32_t, ScotChecker*, SCOT_USRACTION = nullptr);
         ~ScotReplayer();
 
         // void spawn_worker(SCOT_REPLAYER_WORKER_T);
@@ -146,11 +150,12 @@ namespace scot {
         uint32_t id;
 
         ScotReplicator* rpli;
+        SCOT_USRACTION user_action;
 
-        void __worker(struct ScotLog*, uint32_t, ScotReplicator*);
+        void __worker(struct ScotLog*, uint32_t, ScotReplicator*, SCOT_USRACTION = nullptr);
 
     public:
-        ScotReceiver(SCOT_LOGALIGN_T*, uint32_t, ScotReplicator*);
+        ScotReceiver(SCOT_LOGALIGN_T*, uint32_t, ScotReplicator*, SCOT_USRACTION = nullptr);
         ~ScotReceiver();
 
         // void spawn_worker(SCOT_REPLAYER_WORKER_T);
@@ -180,7 +185,7 @@ namespace scot {
         uint32_t prefetch_size;
 
     public:
-        ScotCore();
+        ScotCore(SCOT_USRACTION = nullptr);
         ~ScotCore();
 
         void initialize();
@@ -197,3 +202,4 @@ namespace scot {
         uint32_t get_qsize();
     };
 }
+

@@ -12,7 +12,7 @@ index e4f7d90..7faacb4 100644
  
  # Linux ARM32 needs -latomic at linking time
 diff --git a/src/server.c b/src/server.c
-index b0cef88..a1a23a7 100644
+index b0cef88..98ca25c 100644
 --- a/src/server.c
 +++ b/src/server.c
 @@ -70,6 +70,15 @@
@@ -69,7 +69,106 @@ index b0cef88..a1a23a7 100644
  }
  
  /* Used when a command that is ready for execution needs to be rejected, due to
-@@ -6780,6 +6799,18 @@ int main(int argc, char **argv) {
+@@ -3938,6 +3957,23 @@ int processCommand(client *c) {
+         return C_OK;       
+     }
+ 
++    // Scot-Redis Integration
++    uint32_t hashed;
++    if (is_write_command) {
++
++        if (strcmp(c->argv[0]->ptr, "HMSET") == 0)
++            hashed = scot_hash(c->argv[1]->ptr, strlen(c->argv[1]->ptr));
++
++        else if (strcmp(c->argv[0]->ptr, "ZADD") == 0)
++            hashed = scot_hash(c->argv[3]->ptr, strlen(c->argv[3]->ptr));
++
++        uint64_t idx = scot_timestamp_record_start(ts_handle);
++        scot_propose(
++            c->querybuf, sdslen(c->querybuf), NULL, 0, hashed
++        );
++        scot_timestamp_record_end(ts_handle, idx);
++    }
++
+     /* Exec the command */
+     if (c->flags & CLIENT_MULTI &&
+         c->cmd->proc != execCommand &&
+@@ -4016,6 +4052,9 @@ void closeListeningSockets(int unlink_unix_socket) {
+ int prepareForShutdown(int flags) {
+     if (isShutdownInitiated()) return C_ERR;
+ 
++    // Scot-Redis Integration
++    scot_finalize();
++
+     /* When SHUTDOWN is called while the server is loading a dataset in
+      * memory we need to make sure no attempt is performed to save
+      * the dataset on shutdown (otherwise it could overwrite the current DB
+@@ -6235,6 +6274,9 @@ int changeListenPort(int port, socketFds *sfd, aeFileProc *accept_handler) {
+ 
+ static void sigShutdownHandler(int sig) {
+     char *msg;
++    
++    // Scot-Redis Integration
++    scot_finalize();
+ 
+     switch (sig) {
+     case SIGINT:
+@@ -6775,11 +6817,73 @@ redisTestProc *getTestProcByName(const char *name) {
+ }
+ #endif
+ 
++
++// Scot-Redis Integration
++void scot_redis_replay(void* buf, uint16_t bufsz) {
++
++    int tokn, j;
++    client* fake_client = createClient(NULL); // Unconnected client
++
++    fake_client->flags = CLIENT_SCRIPT | CLIENT_DENY_BLOCKING;
++
++    sdsfree(fake_client->querybuf);
++    fake_client->querybuf = sdsnewlen(buf, bufsz);
++
++    processMultibulkBuffer(fake_client);
++
++    fake_client->cmd = fake_client->lastcmd = fake_client->realcmd = lookupCommand(fake_client->argv, fake_client->argc);
++    
++    pthread_mutex_lock(&call_lock);
++    fake_client->cmd->proc(fake_client);
++    pthread_mutex_unlock(&call_lock);
++
++    sdsfree(fake_client->querybuf);
++    listRelease(fake_client->reply);
++    dictRelease(fake_client->bpop.keys);
++    listRelease(fake_client->watched_keys);
++
++    dictRelease(fake_client->pubsub_channels);
++    listRelease(fake_client->pubsub_patterns);
++    dictRelease(fake_client->pubsubshard_channels);
++
++    zfree(fake_client->buf);
++    freeClientArgv(fake_client);
++    freeClientOriginalArgv(fake_client);
++
++    if (fake_client->deferred_reply_errors)
++        listRelease(fake_client->deferred_reply_errors);
++
++    if (fake_client->mem_usage_bucket) {
++        fake_client->mem_usage_bucket->mem_usage_sum -= fake_client->last_memory_usage;
++        listDelNode(fake_client->mem_usage_bucket->clients, fake_client->mem_usage_bucket_node);
++    }
++
++    freeClientMultiState(fake_client);
++    sdsfree(fake_client->peerid);
++    sdsfree(fake_client->sockname);
++    sdsfree(fake_client->slave_addr);
++
++    zfree(fake_client);
++}
++
++
+ int main(int argc, char **argv) {
+     struct timeval tv;
      int j;
      char config_from_stdin = 0;
  

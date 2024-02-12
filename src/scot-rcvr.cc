@@ -17,8 +17,8 @@
 #include "./includes/scot-core.hh"
 
 
-scot::ScotReceiver::ScotReceiver(SCOT_LOGALIGN_T* addr, uint32_t rcvr_id, scot::ScotReplicator* rpli_ack) 
-    : ScotReader(addr), worker(), worker_signal(0), id(rcvr_id), rpli(rpli_ack) { 
+scot::ScotReceiver::ScotReceiver(SCOT_LOGALIGN_T* addr, uint32_t rcvr_id, scot::ScotReplicator* rpli_ack, SCOT_USRACTION ext_func) 
+    : ScotReader(addr), worker(), worker_signal(0), id(rcvr_id), rpli(rpli_ack), user_action(ext_func) { 
 
     worker_signal_toggle(SCOT_WRKR_PAUSE);
 }
@@ -31,7 +31,7 @@ scot::ScotReceiver::~ScotReceiver() {
 
 #define IS_SIGNALED(SIGN)   (worker_signal & SIGN)
 void scot::ScotReceiver::__worker(
-    struct ScotLog* log, uint32_t rcvr_id, scot::ScotReplicator* rpli) {
+    struct ScotLog* log, uint32_t rcvr_id, scot::ScotReplicator* rpli, SCOT_USRACTION ext_func) {
 
     std::string lc_name_out("rcvr-");
     lc_name_out += std::to_string(rcvr_id);
@@ -67,6 +67,8 @@ void scot::ScotReceiver::__worker(
             );
 
             // Do replay here.
+            if (ext_func != nullptr)
+                ext_func(pyld, rcvd->buf_sz);
 
 #ifdef __DEBUG__
             uint32_t received_hash = rcvd->hashv;
