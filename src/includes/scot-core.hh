@@ -8,6 +8,8 @@
 #include <map>
 #include <string>
 #include <vector>
+#include <array>
+
 #include <atomic>
 #include <thread>
 
@@ -49,51 +51,25 @@ namespace scot {
 
         uint64_t get_confval(const char*);
     };
-    
-
-    // Writer interface
-    class ScotWriter {
-    protected:
-        ScotSlot    slot;
-        ScotLog     log;
-
-        std::atomic_flag writer_lock;
-
-#define __START_WRITE__     while (writer_lock.test_and_set(std::memory_order_acquire)) { }
-#define __END_WRITE__       writer_lock.clear(std::memory_order_release); { }
-
-    public:
-        ScotWriter(SCOT_LOGALIGN_T*);
-        ~ScotWriter() = default;
-
-        SCOT_LOGALIGN_T* get_base();
-    };
 
 
-    class ScotReader {
-    protected:
-        ScotLog log;
-
-    public:
-        ScotReader(SCOT_LOGALIGN_T*);
-        ~ScotReader() = default;
-    };
-
-
-    class ScotReplicator : public ScotWriter {
+    class ScotReplicator {
     private:
+        ScotSlot    slot;
+        uint32_t    pf_size;
+
         scot::hash::LockfreeMap hasht;
+        ScotConnContextPool* ctx_pool;
 
         MessageOut msg_out;     // Logger
 
         // Interface (in)
         void __ht_try_insert(struct ScotSlotEntry*);
         struct ScotSlotEntry* __ht_get_latest_entry(struct ScotSlotEntry*);
-
-        uint32_t pf_size;
-
+        
     public:
-        ScotReplicator(SCOT_LOGALIGN_T*, uint32_t);
+        ScotReplicator(ScotConnContextPool*);
+        ScotReplicator(uint32_t);
         virtual ~ScotReplicator() = default;
 
         uint32_t hash(char*, int);
@@ -102,18 +78,24 @@ namespace scot {
     };
 
 
-    class ScotChecker : public ScotWriter {
+    class ScotChecker {
     private:
-        MessageOut msg_out;     // Logger
+        ScotConnContextPool* ctx_pool;
+        int wait_list_sz;
 
-        uint32_t wait_hashv;
-        std::atomic_flag wait_lock;
+        struct ScotCheckerStatus {
+            std::atomic_bool    in_wait;
+            uint32_t            hashv;
 
-#define __WAIT_FOR_PROPACK__    do { wait_lock.test_and_set(std::memory_order_acquire); } while(0);
-#define __RELEASE_AT_PROPACK__  wait_lock.clear(std::memory_order_release);
+            ScotCheckerStatus() : in_wait(ATOMIC_FLAG_INIT), hashv(0) {}
+        };
 
+        MessageOut  msg_out;     // Logger
+        std::array<struct ScotCheckerStatus, SCOT_MAX_QPOOLSZ> wait_list;
+
+        
     public:
-        ScotChecker(SCOT_LOGALIGN_T*);
+        ScotChecker(ScotConnContextPool*);
         virtual ~ScotChecker() = default;
 
         bool write_request(uint8_t*, uint16_t, uint8_t*, uint16_t, uint32_t, uint32_t);
@@ -121,41 +103,52 @@ namespace scot {
     };
 
 
-    class ScotReplayer : public ScotReader {
+    class ScotReplayer {
     private:
-        std::thread worker;
-        uint32_t worker_signal; // Worker thread only reads.
+        std::thread distr;
+        uint32_t distr_signal; // Worker thread only reads.
 
-        uint32_t id;
+        SCOT_LOGALIGN_T* gbase;
+
+        uint32_t rnid;
+
         ScotChecker* chkr;
         SCOT_USRACTION user_action;
 
-        void __worker(struct ScotLog*, uint32_t, ScotChecker*, SCOT_USRACTION = nullptr);
+        std::vector<SCOT_LOGALIGN_T*> base_list;
+
+        void __worker(uint32_t, ScotChecker*, SCOT_USRACTION = nullptr);
 
     public:
-        ScotReplayer(SCOT_LOGALIGN_T*, uint32_t, ScotChecker*, SCOT_USRACTION = nullptr);
+        ScotReplayer(uint32_t, SCOT_LOGALIGN_T*, ScotConnContextPool*, ScotChecker*, SCOT_USRACTION = nullptr);
+        // ScotReplayer(SCOT_LOGALIGN_T*, uint32_t, ScotChecker*, SCOT_USRACTION = nullptr);
         ~ScotReplayer();
 
         // void spawn_worker(SCOT_REPLAYER_WORKER_T);
-        void worker_spawn();
-        void worker_signal_toggle(uint32_t);
+        void distr_spawn();
+        void distr_signal_toggle(uint32_t);
     };
 
 
-    class ScotReceiver : public ScotReader {
+    class ScotReceiver {
     private:
         std::thread worker;
         uint32_t worker_signal; // Worker thread only reads.
 
-        uint32_t id;
+        SCOT_LOGALIGN_T* gbase;
+
+        uint32_t rnid;
 
         ScotReplicator* rpli;
         SCOT_USRACTION user_action;
 
-        void __worker(struct ScotLog*, uint32_t, ScotReplicator*, SCOT_USRACTION = nullptr);
+        std::vector<SCOT_LOGALIGN_T*> base_list;
+
+        void __worker(uint32_t, ScotReplicator*, SCOT_USRACTION = nullptr);
 
     public:
-        ScotReceiver(SCOT_LOGALIGN_T*, uint32_t, ScotReplicator*, SCOT_USRACTION = nullptr);
+        ScotReceiver(uint32_t, SCOT_LOGALIGN_T*, ScotConnContextPool*, ScotReplicator*, SCOT_USRACTION = nullptr);
+        // ScotReceiver(SCOT_LOGALIGN_T*, uint32_t, ScotReplicator*, SCOT_USRACTION = nullptr);
         ~ScotReceiver();
 
         // void spawn_worker(SCOT_REPLAYER_WORKER_T);
@@ -163,10 +156,12 @@ namespace scot {
         void worker_signal_toggle(uint32_t);
     };
 
+
     class ScotCore {
     private:
         uint32_t nid;
         uint32_t qsize;
+        uint32_t qpool_size;
 
         ScotConfLoader ldr;
         ScotJudge<uint32_t> uint_judge;  // For now, key is used as int.
@@ -180,9 +175,7 @@ namespace scot {
         ScotHeartbeat hb;
         MessageOut msg_out;                     // Logger
 
-        // 
-        uint64_t rc_inline_max;
-        uint32_t prefetch_size;
+        std::map<std::string, uint64_t> ext_confvar;
 
     public:
         ScotCore(SCOT_USRACTION = nullptr);

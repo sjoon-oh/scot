@@ -18,99 +18,157 @@
 #include "./includes/scot-core.hh"
 
 
-scot::ScotReplayer::ScotReplayer(SCOT_LOGALIGN_T* addr, uint32_t rply_id, scot::ScotChecker* chkr_unlock, SCOT_USRACTION ext_func) 
-    : ScotReader(addr), worker(), worker_signal(0), id(rply_id), chkr(chkr_unlock), user_action(ext_func) { 
+scot::ScotReplayer::ScotReplayer(
+    uint32_t rply_id,                       // Receive from who?
+    SCOT_LOGALIGN_T* base,                  // Global base of receiver MR
+    scot::ScotConnContextPool* rpli_pool,   // For building offsets
+    scot::ScotChecker* chkr_unlock,         // Unlock checkers
+    SCOT_USRACTION ext_func)                // Replay function?
+        : gbase(base), distr(), distr_signal(0), rnid(rply_id), chkr(chkr_unlock), user_action(ext_func) {
 
-    worker_signal_toggle(SCOT_WRKR_PAUSE);
+    // Extract offset.
+    for (auto& ctx: rpli_pool->get_pool_list()) {
+        base_list.push_back(
+            reinterpret_cast<SCOT_LOGALIGN_T*>(uintptr_t(gbase) + ctx.at(0).offset));
+    }
+
+    distr_signal_toggle(SCOT_WRKR_PAUSE);
 }
 
 
 scot::ScotReplayer::~ScotReplayer() {
-    worker_signal_toggle(SCOT_WRKR_HALT);
+    distr_signal_toggle(SCOT_WRKR_HALT);
+
 }
 
 
-#define IS_SIGNALED(SIGN)   (worker_signal & SIGN)
+#define IS_SIGNALED(SIGN)   (distr_signal & SIGN)
 void scot::ScotReplayer::__worker(
-    struct ScotLog* log, uint32_t rply_id, scot::ScotChecker* chkr, SCOT_USRACTION ext_func) {
+    uint32_t rply_id, 
+    scot::ScotChecker* chkr, 
+    SCOT_USRACTION ext_func) {
 
     std::string lc_name_out("rply-");
     lc_name_out += std::to_string(rply_id);
 
     MessageOut lc_out(lc_name_out.c_str());
 
-    // Log base
-#ifdef __DEBUG__
-    SCOT_LOGALIGN_T* log_base = log->get_base();
-    __SCOT_INFO__(lc_out, "{} spawned. Log base starts at {:x}.", 
-        lc_name_out, uintptr_t(log_base));
-#endif
+    std::queue<std::thread> spawned;
 
     struct ScotMessageHeader* rcvd;
     SCOT_LOG_FINEGRAINED_T* pyld;
+
+#ifdef __DEBUG__
+    for (auto base: base_list)
+        __SCOT_INFO__(
+            lc_out, "base: 0x{:x}, aligned: 0x{:x}, idx: {}", 
+                uintptr_t(base), 
+                uintptr_t(reinterpret_cast<struct ScotAlignedLog*>(base)->aligned), 
+                reinterpret_cast<struct ScotAlignedLog*>(base)->reserved[SCOT_RESERVED_IDX_FREE]
+        );
+#endif
 
     struct ReplayPair {
         SCOT_LOG_FINEGRAINED_T* buffer;
         size_t buffer_len;
     };
 
-    std::queue<struct ReplayPair> replay_queue;
+    // std::queue<struct ReplayPair> replayq_vec;
+    
+    std::vector<std::queue<struct ReplayPair>> replayq_vec;
+    replayq_vec.resize(base_list.size());
 
+    int idx = 0;
     while (1) {
 
-        // Pause when signaled.
         while (IS_SIGNALED(SCOT_WRKR_PAUSE)) ;
-
-        // End point, whether it is pure, or ACKed.
-        rcvd = reinterpret_cast<struct ScotMessageHeader*>(
-            log->poll_next_local_log(SCOT_MSGTYPE_PURE | SCOT_MSGTYPE_ACK)
-        );
         
-        pyld = reinterpret_cast<SCOT_LOG_FINEGRAINED_T*>(rcvd) 
-            + uintptr_t(sizeof(struct ScotMessageHeader));
+        idx = 0;
+        for (auto base: base_list) {
 
-        if (rcvd->msg & SCOT_MSGTYPE_ACK) {
-            chkr->release_wait(rcvd->hashv);
-        }
+#ifdef __DEBUG__
+            // __SCOT_INFO__(
+            //     lc_out, "Before peek: 0x{:x}", uintptr_t(base)
+            // );
+#endif
 
-        // Push to queue.
-        replay_queue.push({
-            .buffer = pyld,
-            .buffer_len = rcvd->buf_sz
-        });
+            SCOT_LOG_FINEGRAINED_T* rcvd = 
+                FINEPTR_LOOKALIKE(
+                    peek_message(
+                        reinterpret_cast<struct ScotAlignedLog*>(base), 
+                        SCOT_MSGTYPE_PURE | SCOT_MSGTYPE_ACK
+                    )
+                );
 
-        if (rcvd->msg & SCOT_MSGTYPE_COMMPREV) {
-            
-            // Replay function goes here.
-            if (ext_func != nullptr) {
-                
-                while (!replay_queue.empty()) {
-                    SCOT_LOG_FINEGRAINED_T* rep_buf = replay_queue.front().buffer;
-                    size_t rep_buflen = replay_queue.front().buffer_len;
+#ifdef __DEBUG__
+            // __SCOT_INFO__(
+            //     lc_out, "After peek: 0x{:x}", uintptr_t(rcvd)
+            // );
+#endif
 
-                    // Run.
-                    ext_func(rep_buf, rep_buflen);
+            // After peek, and if received the full message,
+            if (rcvd != nullptr) {
+                replayq_vec.at(idx).push({
+                    .buffer = FINEPTR_LOOKALIKE(
+                        uintptr_t(rcvd) + sizeof(struct ScotMessageHeader)),
+                    .buffer_len = MSGHDRPTR_LOOKALIKE(rcvd)->buf_sz
+                });
 
-                    replay_queue.pop();
+                chkr->release_wait(MSGHDRPTR_LOOKALIKE(rcvd)->hashv);
+
+                // Here, insert to hashtable.
+
+                // If commit, get latest.
+                if (MSGHDRPTR_LOOKALIKE(rcvd)->msg & SCOT_MSGTYPE_COMMPREV) {
+                    
+                    if (replayq_vec.at(idx).size() > 0) {
+                        // Launch thread here.
+
+                        SCOT_LOG_FINEGRAINED_T* rep_buf = replayq_vec.at(idx).front().buffer;
+                        size_t rep_buflen = replayq_vec.at(idx).front().buffer_len;
+
+                        spawned.push(std::thread(
+                            [&]() -> void { 
+                                if (ext_func != nullptr)
+                                    ext_func(rep_buf, rep_buflen);
+                                    
+                                MSGHDRPTR_LOOKALIKE(rcvd)->msg = SCOT_MSGTYPE_NONE;
+                            }));
+                    }
                 }
             }
 
-#ifdef __DEBUG__
-            __SCOT_INFO__(lc_out, "→ Commit piggybacked. Safe to replay.");
-#endif
+            idx++;
         }
 
-        rcvd->msg = SCOT_MSGTYPE_NONE;
+        // 
+        // Spawn one in each qpool segment,
+        //  to serialize.
+        if (spawned.size() != 0) {
+            while (spawned.size() != 0) {
+#ifdef __DEBUG__
+                __SCOT_INFO__(lc_out, "→ Waiting spawns to finish, left: {}", spawned.size());
+#endif
+                spawned.front().join();
+                spawned.pop();
+            }
+
+            for (auto& elemq: replayq_vec)
+                elemq.pop();
+        }
     }
 }
 
 
-void scot::ScotReplayer::worker_spawn() {
-    worker = std::thread([&](){ __worker(&(this->log), this->id, this->chkr); });
-    worker.detach();
+void scot::ScotReplayer::distr_spawn() {
+    distr = std::thread([&]() {
+        __worker(rnid, chkr, user_action);
+    });
+
+    distr.detach();
 }
 
 
-void scot::ScotReplayer::worker_signal_toggle(uint32_t signal) {
-    worker_signal ^= signal;
+void scot::ScotReplayer::distr_signal_toggle(uint32_t signal) {
+    distr_signal ^= signal;
 }

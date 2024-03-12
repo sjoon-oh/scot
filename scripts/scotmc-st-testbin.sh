@@ -35,6 +35,8 @@ printf "${normalc}Configuration file path(HB): `echo $HARTEBEEST_CONF_PATH`\n"
 printf "${normalc}Configuration file path(MENC): `echo $SCOT_CONF`\n"
 
 export SCOT_QSIZE=3
+export SCOT_QPOOLSZ=4
+qpoolsz=${SCOT_QPOOLSZ}
 
 if [ "${HARTEBEEST_NID}" == "0" ]; then
     printf "${normalc}Starting Memcached at blanc...\n"
@@ -44,7 +46,7 @@ if [ "${HARTEBEEST_NID}" == "0" ]; then
 
     ssh oslab@143.248.39.169 "memcached -p 9999 &" &
 else
-    usleep 300
+    sleep 1
 fi
 
 # Payload size, Key size, (Total: Payload + Key), Thread number

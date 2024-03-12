@@ -39,20 +39,20 @@ target_link_libraries(${scotlib} PUBLIC ibverbs pthread memcached hartebeest)
 
 # 
 # ------- SCOT-Mencius --------
-set(scotmclib scotmc)
-file(GLOB scotmclib_src 
-    CONFIGURE_DEPENDS 
-    ${PROJECT_SOURCE_DIR}/src/*.cc 
-    ${PROJECT_SOURCE_DIR}/src/sample/*.cc
-    ${PROJECT_SOURCE_DIR}/experiments/mencius/*.cc 
-    )
-add_library(${scotmclib} SHARED ${scotmclib_src})
-set_target_properties(
-    ${scotmclib} 
-    PROPERTIES LIBRARY_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/build/lib
-)
+# set(scotmclib scotmc)
+# file(GLOB scotmclib_src 
+#     CONFIGURE_DEPENDS 
+#     ${PROJECT_SOURCE_DIR}/src/*.cc 
+#     ${PROJECT_SOURCE_DIR}/src/sample/*.cc
+#     ${PROJECT_SOURCE_DIR}/experiments/mencius/*.cc 
+#     )
+# add_library(${scotmclib} SHARED ${scotmclib_src})
+# set_target_properties(
+#     ${scotmclib} 
+#     PROPERTIES LIBRARY_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/build/lib
+# )
 
-target_link_libraries(${scotmclib} PUBLIC ibverbs pthread memcached hartebeest)
+# target_link_libraries(${scotmclib} PUBLIC ibverbs pthread memcached hartebeest)
 
 
 
@@ -98,13 +98,13 @@ target_link_libraries(${mp_mt_testbin} PUBLIC ${scotlib} hartebeest)
 
 
 # Mencius test binary
-set(scotmc_st_testbin scotmc-st-testbin)
-add_executable(
-    ${scotmc_st_testbin}
-    ${PROJECT_SOURCE_DIR}/experiments/mencius/tests/scotmc-st-test.cc
-)
-set_target_properties(
-    ${scotmc_st_testbin} 
-    PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/build/bin
-)
-target_link_libraries(${scotmc_st_testbin} PUBLIC ${scotmclib} hartebeest)
+# set(scotmc_st_testbin scotmc-st-testbin)
+# add_executable(
+#     ${scotmc_st_testbin}
+#     ${PROJECT_SOURCE_DIR}/experiments/mencius/tests/scotmc-st-test.cc
+# )
+# set_target_properties(
+#     ${scotmc_st_testbin} 
+#     PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/build/bin
+# )
+# target_link_libraries(${scotmc_st_testbin} PUBLIC ${scotmclib} hartebeest)

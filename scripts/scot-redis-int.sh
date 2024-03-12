@@ -147,6 +147,9 @@ if [[ "${args}" == *"run"* ]]; then
     
     export SCOT_CONF=${workspace_home}/config/scot.conf
     export SCOT_QSIZE=3
+    export SCOT_QPOOLSZ=4
+    
+    qpoolsz=${SCOT_QPOOLSZ}
 
     cd ${workspace_home}
 
@@ -159,7 +162,7 @@ if [[ "${args}" == *"run"* ]]; then
 
         ssh oslab@143.248.39.169 "memcached -p 9999 &" &
     else
-        usleep 300
+        sleep 1
     fi
 
     ${workspace_home}/build/bin/redis-scot \

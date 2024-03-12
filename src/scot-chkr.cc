@@ -7,6 +7,7 @@
 #include <string>
 #include <iostream>
 #include <vector>
+#include <atomic>
 
 #include <utility>
 
@@ -17,10 +18,14 @@
 #include "./includes/scot-core.hh"
 
 
-scot::ScotChecker::ScotChecker(SCOT_LOGALIGN_T* addr) 
-    : ScotWriter(addr), msg_out("chkr"), wait_hashv(0) { 
+scot::ScotChecker::ScotChecker(scot::ScotConnContextPool* pool) 
+    : ctx_pool(pool), msg_out("chkr") { 
     
-    wait_lock.clear();
+    assert(ctx_pool != nullptr);
+
+    for (int idx = 0; idx < ctx_pool->get_qp_pool_sz(); idx++) {
+        // Do something here?
+    }
 }
 
 bool scot::ScotChecker::write_request(
@@ -28,125 +33,110 @@ bool scot::ScotChecker::write_request(
     uint8_t* key, uint16_t key_sz, 
     uint32_t hashv, uint32_t owner) {
 
-    uint32_t index = slot.register_entry(
-        {   
-            .hashv      = hashv,
-            .buffer     = buf,
-            .buffer_sz  = buf_sz,
-            .key        = key,
-            .key_sz     = key_sz,
-            .msg        = SCOT_MSGTYPE_WAIT
-        }
-    );
+    struct ScotSlotEntry local_entry;
+    local_entry.hashv      = hashv;
+    local_entry.buffer     = buf;
+    local_entry.buffer_sz  = buf_sz;
+    local_entry.key        = key;
+    local_entry.key_sz     = key_sz;
+    local_entry.msg        = SCOT_MSGTYPE_WAIT;
 
-    // HT insert
-    struct ScotSlotEntry* curr = slot.get_slot_entry(index);
+    SCOT_QPOOL_START
 
-    __START_WRITE__ {
+    // This is blocking function.
+    std::vector<struct scot::ConnContext>* qlist = ctx_pool->pop_qlist();
 
-        SCOT_LOGALIGN_T* header = log.write_local_log(curr); // Write to the local log here.        
-        size_t log_sz = sizeof(struct ScotMessageHeader) + 
-            static_cast<size_t>(curr->buffer_sz) + sizeof(uint8_t);
-
-        size_t offset = uintptr_t(header) - uintptr_t(log.get_base());
-        SCOT_LOGALIGN_T* remote_target_addr;
-
-        bool ret = 0;
-
-#ifdef __DEBUG__
-        struct ScotMessageHeader* local_header = 
-            reinterpret_cast<struct ScotMessageHeader*>(header);
-
-        uint32_t unbind_hashv   = local_header->hashv;
-        uint16_t unbind_bufsz   = local_header->buf_sz;
-        uint8_t unbind_inst     = local_header->inst;
-        uint8_t unbind_msg      = local_header->msg;
-
-        SCOT_LOG_FINEGRAINED_T* local_payload = 
-            (SCOT_LOG_FINEGRAINED_T*)(header) + (sizeof(struct ScotMessageHeader));
-
-        __SCOT_INFO__(
-            msg_out, 
-            "→→ RDMA message local header: \n-- Report --\nhashv({}), buf_sz({}), inst({}), msg({}), total {} bytes\n----", 
-            unbind_hashv, unbind_bufsz, unbind_inst, unbind_msg, log_sz
+    // Per-qpool
+    struct ScotAlignedLog* log = reinterpret_cast<struct ScotAlignedLog*>(
+            uintptr_t((*qlist)[0].local.mr->addr) + uintptr_t((*qlist)[0].offset)
         );
-#endif
+    int qpool_sid = (*qlist)[0].qpool_sid;
 
-        wait_hashv = hashv;
+    SCOT_LOGALIGN_T* header = write_local_log(log, &local_entry, 0);
+    size_t logsz = sizeof(struct ScotMessageHeader) + 
+                static_cast<size_t>(local_entry.buffer_sz) + sizeof(uint8_t);
 
-        // 
-        // Send WR first for all quorums
-        for (auto& ctx: ScotConnection::get_instance().get_quorum()) {
-            
-            remote_target_addr = 
-                reinterpret_cast<SCOT_LOGALIGN_T*>(
-                        uintptr_t(ctx.remote.rcvr_mr->addr) + offset);
+    size_t offset = uintptr_t(header) - uintptr_t(log);
+    SCOT_LOGALIGN_T* remote_target_addr;
 
-            if (owner == ctx.nid) {
-                reinterpret_cast<struct ScotMessageHeader*>(header)->msg = 
-                    SCOT_MSGTYPE_WAIT;
+    bool ret = 0;
+    for (auto& ctx: (*qlist)) {
 
-                ret = hartebeest_rdma_post_single_signaled_inline(
-                    ctx.local.chkr_qp,          // Local QP (Checker)
-                    header,                     // Local starting point of a RDMA message
-                    remote_target_addr,         // To where at remote?
-                    log_sz,                     // Total message size
-                    IBV_WR_RDMA_WRITE,
-                    ctx.local.chkr_mr->lkey,    // Local MR acces key
-                    ctx.remote.rcvr_mr->rkey,   // Remote MR access key
-                    ctx.nid);
-            }
-            else {
-                reinterpret_cast<struct ScotMessageHeader*>(header)->msg = 
-                    SCOT_MSGTYPE_HDRONLY;
+        if (owner == ctx.rnid) {
 
-                ret = hartebeest_rdma_post_single_signaled_inline(
-                    ctx.local.chkr_qp,          // Local QP (Checker)
-                    header,                     // Local starting point of a RDMA message
-                    remote_target_addr,         // To where at remote?
-                    sizeof(struct ScotMessageHeader),
-                                                // Total message size
-                    IBV_WR_RDMA_WRITE,
-                    ctx.local.chkr_mr->lkey,    // Local MR acces key
-                    ctx.remote.rcvr_mr->rkey,   // Remote MR access key
-                    ctx.nid);
-            }
+            reinterpret_cast<struct ScotMessageHeader*>(header)->msg = 
+                SCOT_MSGTYPE_WAIT;
 
-            ret = hartebeest_rdma_send_poll(ctx.local.chkr_qp);
+            ret = hartebeest_rdma_post_single_signaled_inline(
+                ctx.local.qp,           // Local QP
+                header,                 // Local starting point of a RDMA message
+                remote_target_addr,     // To where at remote?
+                logsz,                  // Total message size
+                IBV_WR_RDMA_WRITE,
+                ctx.local.mr->lkey,     // Local MR acces key
+                ctx.remote.mr->rkey,    // Remote MR access key
+                ctx.rnid);
 
 #ifdef __DEBUG__
-            assert(ret != false);
+            if (ret != false)
+                __SCOT_INFO__(msg_out, "→→ RDMA Write failed");
 #endif
+
+
+        } else {
+
+            reinterpret_cast<struct ScotMessageHeader*>(header)->msg = 
+                SCOT_MSGTYPE_HDRONLY;
+
+            ret = hartebeest_rdma_post_single_signaled_inline(
+                ctx.local.qp,           // Local QP
+                header,                 // Local starting point of a RDMA message
+                remote_target_addr,     // To where at remote?
+                sizeof(struct ScotMessageHeader),                 
+                                        // Total message size
+                IBV_WR_RDMA_WRITE,
+                ctx.local.mr->lkey,     // Local MR acces key
+                ctx.remote.mr->rkey,    // Remote MR access key
+                ctx.rnid);
+
+#ifdef __DEBUG__
+            if (ret != false)
+                __SCOT_INFO__(msg_out, "→→ RDMA Write failed");
+#endif
+    
         }
 
+        ret = hartebeest_rdma_send_poll(ctx.local.qp);
 
 #ifdef __DEBUG__
-        __SCOT_INFO__(msg_out, "→→ write_request end: {}", index);
-#endif
-
-        __WAIT_FOR_PROPACK__
-
-    } __END_WRITE__
-
-    wait_hashv = 0;
-
-    if (slot.mark_entry_finished(index, curr) == SCOT_SLOT_RESET) { // Reset comes here.
-#ifdef __DEBUG__
-        __SCOT_INFO__(msg_out, "→→ Slot/hasht reset triggered");
+            if (ret != false)
+                __SCOT_INFO__(msg_out, "→→ CQ poll not successful");
 #endif
     }
+
+    wait_list[qpool_sid].in_wait.store(1, std::memory_order_release);
+
+    while (wait_list[qpool_sid].in_wait.load(std::memory_order_acquire) == 0)
+        ;
+
+    SCOT_QPOOL_END
     
     return 0;
 }
 
 
 void scot::ScotChecker::release_wait(uint32_t hashv) {
-    
-    if (wait_hashv == hashv) {
-        __RELEASE_AT_PROPACK__
 
+    for (int idx = 0; idx < wait_list_sz; idx) {
+        
+        if (wait_list[idx].in_wait.load(std::memory_order_acquire) == 1) {
+            if (wait_list[idx].hashv == hashv) {
+                wait_list[idx].in_wait.store(0, std::memory_order_release);
 #ifdef __DEBUG__
-    __SCOT_INFO__(msg_out, "→→ Checker released, for {}", wait_hashv);
+                __SCOT_INFO__(msg_out, "→→ Checker released, for {}", hashv);
 #endif
+            }
+                
+        }
     }
 }

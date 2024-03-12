@@ -27,7 +27,7 @@ namespace scot {
         struct timespec* start;
         struct timespec* end;
 
-        std::atomic_uint64_t next;
+        std::atomic_uint next;
 
         // out
         std::string fname;

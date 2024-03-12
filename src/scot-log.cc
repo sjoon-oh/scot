@@ -7,6 +7,8 @@
 #include <string>
 #include <memory>
 
+#include <iostream>
+
 #include <cstring>
 #include <cstdio>
 
@@ -17,6 +19,7 @@
 
 #include "./includes/scot-slot.hh"
 #include "./includes/scot-log.hh"
+
 
 int scot_hash_cmp(void* a, void* b) {
 
@@ -33,89 +36,76 @@ int scot_hash_cmp(void* a, void* b) {
 }
 
 
-scot::ScotLog::ScotLog(uint8_t* mr_addr) : next_free(0), instn(0) {
+uint32_t scot::next_aligned_idx(struct ScotAlignedLog* log, uint16_t buf_sz) {
 
-    log = reinterpret_cast<SCOT_LOGALIGN_T*>(mr_addr);
-    std::memset(log, 0, sizeof(struct ScotAlignedLog));
-}
-
-
-scot::ScotLog::ScotLog(SCOT_LOGALIGN_T* mr_addr) : next_free(0), instn(0) {
-    
-    log = mr_addr;
-    std::memset(log, 0, sizeof(struct ScotAlignedLog));
-}
-
-
-uint32_t scot::ScotLog::__get_next_aligned_idx(uint32_t cur_align, uint16_t buf_sz) {
+    // If not aligned, give extra space.
+    // buf_sz should contain physical size, including header, payload, canary etc.
+    uint32_t cur_idx = log->reserved[SCOT_RESERVED_IDX_FREE];
 
     if (buf_sz % sizeof(SCOT_LOGALIGN_T) != 0)
         buf_sz += sizeof(SCOT_LOGALIGN_T);
     
     uint32_t take = buf_sz / sizeof(SCOT_LOGALIGN_T);
-    uint32_t next_align = cur_align + take;
+    uint32_t next_idx = cur_idx + take;
 
-    if (next_align > (SCOT_ALIGN_COUNTS - 1))
+    if (next_idx > log->bound)
         return 0;
 
-    return next_align;
+    return next_idx;
 }
 
 
-SCOT_LOGALIGN_T* scot::ScotLog::write_local_log(struct ScotSlotEntry* request) {
+SCOT_LOGALIGN_T* scot::write_local_log(struct ScotAlignedLog* log, struct ScotSlotEntry* request, uint8_t instn) {
 
     // Make message and write to the local log
-    uint32_t cur_align_index = next_free;
+    uint32_t cur_idx = log->reserved[SCOT_RESERVED_IDX_FREE];
 
-    SCOT_LOG_FINEGRAINED_T* log_pos = 
-        reinterpret_cast<SCOT_LOG_FINEGRAINED_T*>(
-            &(LOG_WRAPPER_INSTANCE(log).aligned[cur_align_index])
-        );
+    SCOT_LOG_FINEGRAINED_T* pos = 
+        FINEPTR_LOOKALIKE(&(log->aligned[cur_idx]));
+
+#ifdef __DEBUG__
+    std::cout << "WR: index " << cur_idx << std::endl;
+#endif
 
     //
     // 1. Record the message header
-    struct ScotMessageHeader* header = reinterpret_cast<struct ScotMessageHeader*>(log_pos);
+    struct ScotMessageHeader* header = reinterpret_cast<struct ScotMessageHeader*>(pos);
     header->hashv   = request->hashv;
     header->buf_sz  = request->buffer_sz;
     header->inst    = instn;
     header->msg     = request->msg;
 
     instn++;
-    cur_align_index += 2; //sizeof(struct ScotMessageHeader) in index
+    cur_idx += 2;   //sizeof(struct ScotMessageHeader) in index
 
     // 
     // 2. Record the payload
+    pos = reinterpret_cast<SCOT_LOG_FINEGRAINED_T*>(&(log->aligned[cur_idx]));
 
-
-    log_pos = reinterpret_cast<SCOT_LOG_FINEGRAINED_T*>(
-            &(LOG_WRAPPER_INSTANCE(log).aligned[cur_align_index])
-        );
-    std::memcpy(log_pos, request->buffer, request->buffer_sz);
-
-    log_pos += uintptr_t(request->buffer_sz);
+    std::memcpy(pos, request->buffer, request->buffer_sz);
+    pos += uintptr_t(request->buffer_sz);
 
     //
     // 3. Record the Canary
     uint8_t canary = SCOT_LOGENTRY_CANARY;
-    std::memcpy(log_pos, &canary, sizeof(canary));
+    std::memcpy(pos, &canary, sizeof(canary));
 
-    cur_align_index = __get_next_aligned_idx(cur_align_index, (request->buffer_sz + sizeof(canary)));
+    log->reserved[SCOT_RESERVED_IDX_FREE] = cur_idx;
+    cur_idx = next_aligned_idx(log, (request->buffer_sz + sizeof(canary)));
 
     // Update index
-    next_free = cur_align_index;
+    log->reserved[SCOT_RESERVED_IDX_FREE] = cur_idx;
 
     return reinterpret_cast<SCOT_LOGALIGN_T*>(header);
 }
 
 
-SCOT_LOGALIGN_T* scot::ScotLog::poll_next_local_log(uint8_t msg_detect) {
+SCOT_LOGALIGN_T* scot::poll_message_blocked(struct ScotAlignedLog* log, uint8_t msg_detect) {
 
-    uint32_t cur_align_index = next_free;
+    uint32_t cur_idx = log->reserved[SCOT_RESERVED_IDX_FREE];
 
     SCOT_LOG_FINEGRAINED_T* log_pos = 
-        reinterpret_cast<SCOT_LOG_FINEGRAINED_T*>(
-            &(LOG_WRAPPER_INSTANCE(log).aligned[cur_align_index])
-        );
+        FINEPTR_LOOKALIKE(&(log->aligned[cur_idx]));
         
     SCOT_LOG_FINEGRAINED_T* pld_pos = log_pos;
     SCOT_LOG_FINEGRAINED_T* cnry_pos = nullptr;
@@ -129,7 +119,7 @@ SCOT_LOGALIGN_T* scot::ScotLog::poll_next_local_log(uint8_t msg_detect) {
     while ((detect_type = (rcv_header->msg & msg_detect)) == 0)
         detect_type = 0;
 
-    cur_align_index += 2;
+    cur_idx += 2;
     pld_pos += uintptr_t(sizeof(struct ScotMessageHeader));
 
 #ifdef __DEBUG__
@@ -162,32 +152,83 @@ SCOT_LOGALIGN_T* scot::ScotLog::poll_next_local_log(uint8_t msg_detect) {
         *(reinterpret_cast<uint8_t*>(cnry_pos)) = 0; // Reset canary value.
     }
 
-    cur_align_index = __get_next_aligned_idx(cur_align_index, 
-        (rcv_header->buf_sz + sizeof(uint8_t)));
-    next_free = cur_align_index;
+    log->reserved[SCOT_RESERVED_IDX_FREE] = cur_idx;
+    cur_idx = next_aligned_idx(log, (rcv_header->buf_sz + sizeof(uint8_t)));
 
-    instn++;
+    // Update index
+    log->reserved[SCOT_RESERVED_IDX_FREE] = cur_idx;
 
     return reinterpret_cast<SCOT_LOGALIGN_T*>(rcv_header);
 }
 
 
-SCOT_LOGALIGN_T* scot::ScotLog::get_base() {
-    return log;
-}
+SCOT_LOGALIGN_T* scot::peek_message(struct ScotAlignedLog* log, uint8_t msg_detect) {
+
+    uint32_t cur_idx = log->reserved[SCOT_RESERVED_IDX_FREE];
+
+    SCOT_LOG_FINEGRAINED_T* log_pos = 
+        FINEPTR_LOOKALIKE(uintptr_t(log->aligned) + (cur_idx * sizeof(SCOT_LOGALIGN_T)));
+
+    // std::cout << "PEEK: Current index " << cur_idx << " addr: " << std::hex << log_pos << std::endl;
+
+    SCOT_LOG_FINEGRAINED_T* pld_pos = log_pos;
+    SCOT_LOG_FINEGRAINED_T* cnry_pos = nullptr;
+
+    struct ScotMessageHeader* rcv_header = 
+        reinterpret_cast<struct ScotMessageHeader*>(log_pos);
+
+    assert(rcv_header != nullptr);
+
+    // Wait until a message is written from the remote.
+    // 1. Wait for message detect.
+    uint8_t detect_type = 0;
+    if ((detect_type = (rcv_header->msg & msg_detect)) == 0) {
 
 
-SCOT_LOGALIGN_T* scot::ScotLog::get_next_aligned_addr() {
-    uint32_t cur_align_index = next_free;
-    return &(LOG_WRAPPER_INSTANCE(log).aligned[cur_align_index]);
-}
+        return nullptr;
+    }
 
+    std::cout << "Detected: " << detect_type << std::endl;
 
-uint8_t scot::ScotLog::get_instn() {
-    return instn;
-}
+    cur_idx += 2;
+    pld_pos += uintptr_t(sizeof(struct ScotMessageHeader));
 
+#ifdef __DEBUG__
 
-uint32_t scot::ScotLog::get_next_free() {
-    return next_free;
+    std::string mtype;
+    switch (rcv_header->msg) {
+        case SCOT_MSGTYPE_ACK: mtype = "ACK"; break;
+        case SCOT_MSGTYPE_PURE: mtype = "PURE"; break;
+        case SCOT_MSGTYPE_WAIT: mtype = "WAIT"; break;
+        case SCOT_MSGTYPE_HDRONLY: mtype = "HDR"; break;
+    }
+
+    printf("Detected {hashv: %ld, bufsz: %ld, msg: %s, payload: %s}.\n", 
+        rcv_header->hashv,
+        rcv_header->buf_sz,
+        mtype.c_str(),
+        (char*)pld_pos
+        );
+    
+#endif
+
+    // rcv_header->msg = 0;
+
+    // 3. Wait for canary (Validation).
+    cnry_pos = pld_pos + uintptr_t(rcv_header->buf_sz);
+    if (rcv_header->msg != SCOT_MSGTYPE_HDRONLY) {
+        if ((*(reinterpret_cast<uint8_t*>(cnry_pos))) != SCOT_LOGENTRY_CANARY) {
+            return nullptr;
+        }
+        else
+            *(reinterpret_cast<uint8_t*>(cnry_pos)) = 0; // Reset canary value.
+    }
+
+    log->reserved[SCOT_RESERVED_IDX_FREE] = cur_idx;
+    cur_idx = next_aligned_idx(log, (rcv_header->buf_sz + sizeof(uint8_t)));
+
+    // Update index
+    log->reserved[SCOT_RESERVED_IDX_FREE] = cur_idx;
+
+    return reinterpret_cast<SCOT_LOGALIGN_T*>(rcv_header);
 }

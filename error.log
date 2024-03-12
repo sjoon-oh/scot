@@ -1,0 +1,135 @@
+[0;32m[MESSAGE][0m  Key size: 8, Payload size: 24, Threads: 4
+[0;32m[MESSAGE][0m  LD_LIBRARY_PATH=/opt/rh/devtoolset-7/root/usr/lib64:/opt/rh/devtoolset-7/root/usr/lib:/opt/rh/devtoolset-7/root/usr/lib64/dyninst:/opt/rh/devtoolset-7/root/usr/lib/dyninst:/opt/rh/devtoolset-7/root/usr/lib64:/opt/rh/devtoolset-7/root/usr/lib:/home/oslab/sjoon/workspace/sjoon-git/scot/build/lib:/home/oslab/sjoon/workspace/sjoon-git/scot/hartebeest/build/lib
+[0;32m[MESSAGE][0m Configuration file path(HB): /home/oslab/sjoon/workspace/sjoon-git/scot/config/qp.conf
+[0;32m[MESSAGE][0m Configuration file path(SCOT): /home/oslab/sjoon/workspace/sjoon-git/scot/config/scot.conf
+[0;32m[MESSAGE][0m Starting Memcached at blanc...
+[scot-ldr:info] Loading configuration.
+[scot-ldr:info] Configuration set(SCOT): [inline-max, 828].
+[scot-ldr:info] Configuration set(SCOT): [mencius-skip-delay, 7000].
+[scot-ldr:info] Configuration set(SCOT): [prefetch-size, 2].
+[scot-ldr:info] Configuration set(SCOT): [qp-pool, 4].
+[scot-ldr:info] Configuration set(SCOT): [version, 0].
+[scot-core:info] Core init start.
+[HB:info] Initializing envvars...
+[HB:info] HARTEBEEST_PARTICIPANTS=0,1,2
+[HB:info] HARTEBEEST_NID=0
+[HB:info] HARTEBEEST_EXC_IP_PORT=143.248.39.169:9999
+[HB:info] HARTEBEEST_CONF_PATH=/home/oslab/sjoon/workspace/sjoon-git/scot/config/qp.conf
+[HB:info] Initializing paramters...
+[HB:info] Substitute: cq_attr, [cq_depth, 128]
+[HB:info] Substitute: qp_init_attr, [rc:cap.max_send_wr, 128]
+[HB:info] Substitute: qp_init_attr, [rc:cap.max_send_sge, 1]
+[HB:info] Substitute: qp_init_attr, [rc:cap.max_recv_sge, 1]
+[HB:info] Substitute: qp_init_attr, [rc:cap.max_inline_data, 828]
+[HB:info] Substitute: qp_attr, [rc:path_mtu, 5]
+[HB:info] HCA: DEVICE OPEN OK
+[HB:info] HCAINITR: PORT BINDING OK
+[HB:info] New protection domain pd-scot: CACHE: REGISTERED OK
+[HB:info] New memory region mr-rpli, to pd-scot: CACHE: REGISTERED OK, COMPOUND
+[HB:info] New basic completion queue scq-rpli-0-1-0: CACHE: REGISTERED OK
+[HB:info] New basic completion queue rcq-rpli-0-1-0: CACHE: REGISTERED OK
+[HB:info] New QP(qp-rpli-0-1-0, 0x1bc1058), at 0 state
+	Detail - 128, 128, 1, 1, 828
+[HB:info] Exchanger: nid(0), participants(0,1,2)
+[HB:info] Memcached server 143.248.39.169 at port 9999 added: OK
+[HB:info] New basic completion queue scq-rpli-0-2-0: CACHE: REGISTERED OK
+[HB:info] New basic completion queue rcq-rpli-0-2-0: CACHE: REGISTERED OK
+[HB:info] New QP(qp-rpli-0-2-0, 0x1bda5d8), at 0 state
+	Detail - 128, 128, 1, 1, 828
+[HB:info] New basic completion queue scq-rpli-0-1-1: CACHE: REGISTERED OK
+[HB:info] New basic completion queue rcq-rpli-0-1-1: CACHE: REGISTERED OK
+[HB:info] New QP(qp-rpli-0-1-1, 0x1bbf738), at 0 state
+	Detail - 128, 128, 1, 1, 828
+[HB:info] New basic completion queue scq-rpli-0-2-1: CACHE: REGISTERED OK
+[HB:info] New basic completion queue rcq-rpli-0-2-1: CACHE: REGISTERED OK
+[HB:info] New QP(qp-rpli-0-2-1, 0x1bec6a8), at 0 state
+	Detail - 128, 128, 1, 1, 828
+[HB:info] New basic completion queue scq-rpli-0-1-2: CACHE: REGISTERED OK
+[HB:info] New basic completion queue rcq-rpli-0-1-2: CACHE: REGISTERED OK
+[HB:info] New QP(qp-rpli-0-1-2, 0x1bfe5c8), at 0 state
+	Detail - 128, 128, 1, 1, 828
+[HB:info] New basic completion queue scq-rpli-0-2-2: CACHE: REGISTERED OK
+[HB:info] New basic completion queue rcq-rpli-0-2-2: CACHE: REGISTERED OK
+[HB:info] New QP(qp-rpli-0-2-2, 0x1c105f8), at 0 state
+	Detail - 128, 128, 1, 1, 828
+[HB:info] New basic completion queue scq-rpli-0-1-3: CACHE: REGISTERED OK
+[HB:info] New basic completion queue rcq-rpli-0-1-3: CACHE: REGISTERED OK
+[HB:info] New QP(qp-rpli-0-1-3, 0x1c225c8), at 0 state
+	Detail - 128, 128, 1, 1, 828
+[HB:info] New basic completion queue scq-rpli-0-2-3: CACHE: REGISTERED OK
+[HB:info] New basic completion queue rcq-rpli-0-2-3: CACHE: REGISTERED OK
+[HB:info] New QP(qp-rpli-0-2-3, 0x1c345f8), at 0 state
+	Detail - 128, 128, 1, 1, 828
+[HB:info] New memory region mr-rply-0-1, to pd-scot: CACHE: REGISTERED OK, COMPOUND
+[HB:info] New basic completion queue scq-rply-0-1-0: CACHE: REGISTERED OK
+[HB:info] New basic completion queue rcq-rply-0-1-0: CACHE: REGISTERED OK
+[HB:info] New QP(qp-rply-0-1-0, 0x1c46718), at 0 state
+	Detail - 128, 128, 1, 1, 828
+[HB:info] New basic completion queue scq-rply-0-1-2: CACHE: REGISTERED OK
+[HB:info] New basic completion queue rcq-rply-0-1-2: CACHE: REGISTERED OK
+[HB:info] New QP(qp-rply-0-1-2, 0x1c58718), at 0 state
+	Detail - 128, 128, 1, 1, 828
+[HB:info] New memory region mr-rply-0-2, to pd-scot: CACHE: REGISTERED OK, COMPOUND
+[HB:info] New basic completion queue scq-rply-0-2-0: CACHE: REGISTERED OK
+[HB:info] New basic completion queue rcq-rply-0-2-0: CACHE: REGISTERED OK
+[HB:info] New QP(qp-rply-0-2-0, 0x1c6a868), at 0 state
+	Detail - 128, 128, 1, 1, 828
+[HB:info] New basic completion queue scq-rply-0-2-2: CACHE: REGISTERED OK
+[HB:info] New basic completion queue rcq-rply-0-2-2: CACHE: REGISTERED OK
+[HB:info] New QP(qp-rply-0-2-2, 0x1c7c778), at 0 state
+	Detail - 128, 128, 1, 1, 828
+[HB:info] New memory region mr-chkr, to pd-scot: CACHE: REGISTERED OK, COMPOUND
+[HB:info] New basic completion queue scq-chkr-0-1-0: CACHE: REGISTERED OK
+[HB:info] New basic completion queue rcq-chkr-0-1-0: CACHE: REGISTERED OK
+[HB:info] New QP(qp-chkr-0-1-0, 0x1c8e738), at 0 state
+	Detail - 128, 128, 1, 1, 828
+[HB:info] New basic completion queue scq-chkr-0-2-0: CACHE: REGISTERED OK
+[HB:info] New basic completion queue rcq-chkr-0-2-0: CACHE: REGISTERED OK
+[HB:info] New QP(qp-chkr-0-2-0, 0x1ca05f8), at 0 state
+	Detail - 128, 128, 1, 1, 828
+[HB:info] New basic completion queue scq-chkr-0-1-1: CACHE: REGISTERED OK
+[HB:info] New basic completion queue rcq-chkr-0-1-1: CACHE: REGISTERED OK
+[HB:info] New QP(qp-chkr-0-1-1, 0x1cb2548), at 0 state
+	Detail - 128, 128, 1, 1, 828
+[HB:info] New basic completion queue scq-chkr-0-2-1: CACHE: REGISTERED OK
+[HB:info] New basic completion queue rcq-chkr-0-2-1: CACHE: REGISTERED OK
+[HB:info] New QP(qp-chkr-0-2-1, 0x1cd63c8), at 0 state
+	Detail - 128, 128, 1, 1, 828
+[HB:info] New basic completion queue scq-chkr-0-1-2: CACHE: REGISTERED OK
+[HB:info] New basic completion queue rcq-chkr-0-1-2: CACHE: REGISTERED OK
+[HB:info] New QP(qp-chkr-0-1-2, 0x1ce82e8), at 0 state
+	Detail - 128, 128, 1, 1, 828
+[HB:info] New basic completion queue scq-chkr-0-2-2: CACHE: REGISTERED OK
+[HB:info] New basic completion queue rcq-chkr-0-2-2: CACHE: REGISTERED OK
+[HB:info] New QP(qp-chkr-0-2-2, 0x1cfa138), at 0 state
+	Detail - 128, 128, 1, 1, 828
+[HB:info] New basic completion queue scq-chkr-0-1-3: CACHE: REGISTERED OK
+[HB:info] New basic completion queue rcq-chkr-0-1-3: CACHE: REGISTERED OK
+[HB:info] New QP(qp-chkr-0-1-3, 0x1d0c088), at 0 state
+	Detail - 128, 128, 1, 1, 828
+[HB:info] New basic completion queue scq-chkr-0-2-3: CACHE: REGISTERED OK
+[HB:info] New basic completion queue rcq-chkr-0-2-3: CACHE: REGISTERED OK
+[HB:info] New QP(qp-chkr-0-2-3, 0x1d1e088), at 0 state
+	Detail - 128, 128, 1, 1, 828
+[HB:info] New memory region mr-rcvr-0-1, to pd-scot: CACHE: REGISTERED OK, COMPOUND
+[HB:info] New basic completion queue scq-rcvr-0-1-0: CACHE: REGISTERED OK
+[HB:info] New basic completion queue rcq-rcvr-0-1-0: CACHE: REGISTERED OK
+[HB:info] New QP(qp-rcvr-0-1-0, 0x1d30088), at 0 state
+	Detail - 128, 128, 1, 1, 828
+[HB:info] New basic completion queue scq-rcvr-0-1-2: CACHE: REGISTERED OK
+[HB:info] New basic completion queue rcq-rcvr-0-1-2: CACHE: REGISTERED OK
+[HB:info] New QP(qp-rcvr-0-1-2, 0x1d42088), at 0 state
+	Detail - 128, 128, 1, 1, 828
+[HB:info] New memory region mr-rcvr-0-2, to pd-scot: CACHE: REGISTERED OK, COMPOUND
+[HB:info] New basic completion queue scq-rcvr-0-2-0: CACHE: REGISTERED OK
+[HB:info] New basic completion queue rcq-rcvr-0-2-0: CACHE: REGISTERED OK
+[HB:info] New QP(qp-rcvr-0-2-0, 0x1d56088), at 0 state
+	Detail - 128, 128, 1, 1, 828
+[HB:info] New basic completion queue scq-rcvr-0-2-2: CACHE: REGISTERED OK
+[HB:info] New basic completion queue rcq-rcvr-0-2-2: CACHE: REGISTERED OK
+[HB:info] New QP(qp-rcvr-0-2-2, 0x1d68088), at 0 state
+	Detail - 128, 128, 1, 1, 828
+[0;32m[MESSAGE][0m Killing Memcached at blanc...
+scot-redis.csv: ok.
+stat-scot-redis.csv: unexpected format.
+status-report.csv: unexpected format.

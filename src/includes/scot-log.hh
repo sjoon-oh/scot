@@ -16,8 +16,13 @@ extern "C" {
 
 // Current SCOT_LOGALIGN_T : uint32_t
 struct __attribute__((packed)) ScotAlignedLog {
+    SCOT_LOGALIGN_T* aligned;
+    size_t bound;
     SCOT_LOGALIGN_T reserved[SCOT_LOGHEADER_RESERVED];
-    SCOT_LOGALIGN_T aligned[SCOT_ALIGN_COUNTS];
+};
+
+enum {
+    SCOT_RESERVED_IDX_FREE = 0,
 };
 
 struct __attribute__((packed)) ScotMessageHeader {
@@ -34,29 +39,12 @@ int scot_hash_cmp(void*, void*);
 #endif
 
 namespace scot {
-    class ScotLog {
-    protected:
-        uint32_t next_free;
-        SCOT_LOGALIGN_T* log;
 
-        uint8_t instn;
+    uint32_t next_aligned_idx(struct ScotAlignedLog*, uint16_t);
 
-        uint32_t __get_next_aligned_idx(uint32_t, uint16_t);
-
-    public:
-        ScotLog(uint8_t*);
-        ScotLog(SCOT_LOGALIGN_T*);
-        ~ScotLog() = default;
-
-        SCOT_LOGALIGN_T* write_local_log(struct ScotSlotEntry*);
-        SCOT_LOGALIGN_T* poll_next_local_log(uint8_t);
-
-        SCOT_LOGALIGN_T* get_base();
-        SCOT_LOGALIGN_T* get_next_aligned_addr();
-
-        uint8_t get_instn();
-        uint32_t get_next_free();
-    };
+    SCOT_LOGALIGN_T* write_local_log(struct ScotAlignedLog*, struct ScotSlotEntry*, uint8_t);
+    SCOT_LOGALIGN_T* poll_message_blocked(struct ScotAlignedLog*, uint8_t);
+    SCOT_LOGALIGN_T* peek_message(struct ScotAlignedLog*, uint8_t);
 }
 
-#define LOG_WRAPPER_INSTANCE(LOG)       (*(reinterpret_cast<struct ScotAlignedLog*>(LOG)))
+#define LOG_LOOKALIKE(BASE)    (*(reinterpret_cast<struct ScotAlignedLog*>(BASE)))

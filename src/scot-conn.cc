@@ -13,36 +13,392 @@
 #include "../hartebeest/src/includes/hartebeest-c.h"
 
 #include "./includes/scot-def.hh"
+#include "./includes/scot-mout.hh"
 #include "./includes/scot-conn.hh"
 #include "./includes/scot-hb.hh"
+#include "./includes/scot-log.hh"
 
 
-// Keysets
-namespace scot {
+// ScotConnContextPool
+scot::ScotConnContextPool::ScotConnContextPool(int nid, int qsz_a, int psz_a)
+    : local_nid(nid), quorum_sz(qsz_a), qp_pool_sz(psz_a) {
+
+    assert(qp_pool_sz < SCOT_MAX_QPOOLSZ);
+    ctx_pool.resize(qp_pool_sz);
+}
+
+
+std::vector<std::vector<struct scot::ConnContext>>& scot::ScotConnContextPool::get_pool_list() {
+    return ctx_pool;
+}
+
+
+int scot::ScotConnContextPool::get_local_nid() { 
+    return local_nid; 
+}
+
+
+int scot::ScotConnContextPool::get_quorum_sz() { 
+    return quorum_sz; 
+}
+
+
+int scot::ScotConnContextPool::get_qp_pool_sz() { 
+    return qp_pool_sz; 
+}
+
+
+std::vector<struct scot::ConnContext>* scot::ScotConnContextPool::pop_qlist() {
+
+    int left; 
+    while (!((left = allowed.fetch_sub(1)) > 0))
+        allowed.fetch_add(1);   // Return if not allowed.
+
+    // std::lock_guard<std::mutex> scoped_guard(pool_lock);
+    while (pool_lock.test_and_set(std::memory_order_acquire))
+        ;
+
+    std::vector<struct scot::ConnContext>* next = ctx_free.front();
+    ctx_free.pop();
+
+    pool_lock.clear(std::memory_order_relaxed);
+
+    return next;
+}
+
+
+void scot::ScotConnContextPool::push_qlist(std::vector<struct scot::ConnContext>* qlist) {
+
+    while (pool_lock.test_and_set(std::memory_order_acquire))
+        ;
+    
+    ctx_free.push(qlist);
+    pool_lock.clear(std::memory_order_relaxed);
+
+    allowed.fetch_add(1);
+}
+
+
+std::string scot::helper::key_generator(const char* resrc, int local, int remote, int qid) {
+    
+        std::string key(resrc);
+        if (local >= 0) { 
+            key += "-"; 
+            key += std::to_string(local); 
+        }
+
+        if (remote >= 0) { 
+            key += "-"; 
+            key += std::to_string(remote); 
+        }
+        
+        if (qid >= 0) { 
+            key += "-"; 
+            key += std::to_string(qid); 
+        }
+
+        return key;
+    }
+
+
+namespace helper {
+
     const char* rpli_ks[] = {HBKEY_MR_RPLI, HBKEY_QP_RPLI, HBKEY_SCQ_RPLI, HBKEY_RCQ_RPLI};
     const char* chkr_ks[] = {HBKEY_MR_CHKR, HBKEY_QP_CHKR, HBKEY_SCQ_CHKR, HBKEY_RCQ_CHKR};
     const char* rply_ks[] = {HBKEY_MR_RPLY, HBKEY_QP_RPLY, HBKEY_SCQ_RPLY, HBKEY_RCQ_RPLY};
     const char* rcvr_ks[] = {HBKEY_MR_RCVR, HBKEY_QP_RCVR, HBKEY_SCQ_RCVR, HBKEY_RCQ_RCVR};
-}
+
+    enum { KEY_MR = 0, KEY_QP, KEY_SCQ, KEY_RCQ };
 
 
-std::string scot::wkey_helper(const char* resrc, int local, int remote) {
-    
-    std::string key(resrc);
-    if (local >= 0) { key += "-"; key += std::to_string(local); }
-    if (remote >= 0) { key += "-"; key += std::to_string(remote); }
-
-    return key;
-}
+    void init_pd(const char* pd_name) {
+        hartebeest_create_local_pd(pd_name);
+    }
 
 
-std::string scot::rkey_helper(const char* resrc, int local, int remote) {
+    void prepare_writer_asset(
+        scot::MessageOut& out,
+        scot::ScotConnContextPool& writer_pool, const char** keyset) {
 
-    std::string key(resrc);
-    if (remote >= 0) { key += "-"; key += std::to_string(remote); }
-    if (local >= 0) { key += "-"; key += std::to_string(local); }
-    
-    return key;
+#ifdef __DEBUG__
+        __SCOT_INFO__(out, "→ {} start.", __func__);
+#endif
+
+        // initializes replicator assets
+        // 1. Make MR.
+        hartebeest_create_local_mr(
+            HBKEY_PD, scot::helper::key_generator(keyset[KEY_MR]).c_str(), SCOT_BUFFER_SZ,
+            0 | IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_READ | IBV_ACCESS_REMOTE_WRITE
+        );
+
+        int lnid = writer_pool.get_local_nid();
+
+        //
+        // Build pool
+        for (int qpool_sid = 0; qpool_sid < writer_pool.get_qp_pool_sz(); qpool_sid++) {
+            
+            for (int rnid = 0; rnid < writer_pool.get_quorum_sz(); rnid++) {
+
+                if (rnid == lnid) continue;
+
+                // 1. Create SEND Queue
+                hartebeest_create_basiccq(
+                    scot::helper::key_generator(keyset[KEY_SCQ], lnid, rnid, qpool_sid).c_str());
+
+                // 2. Create RECV Queue
+                hartebeest_create_basiccq(
+                    scot::helper::key_generator(keyset[KEY_RCQ], lnid, rnid, qpool_sid).c_str());
+
+                // 3. Create Queue Pair
+                hartebeest_create_local_qp(
+                    HBKEY_PD, 
+                    scot::helper::key_generator(keyset[KEY_QP], lnid, rnid, qpool_sid).c_str(),
+                    IBV_QPT_RC,
+                    scot::helper::key_generator(keyset[KEY_SCQ], lnid, rnid, qpool_sid).c_str(),
+                    scot::helper::key_generator(keyset[KEY_RCQ], lnid, rnid, qpool_sid).c_str()
+                );
+
+                hartebeest_init_local_qp(
+                    HBKEY_PD,
+                    scot::helper::key_generator(keyset[KEY_QP], lnid, rnid, qpool_sid).c_str()
+                );
+
+                // 4. Push to Memcached
+                bool is_pushed = hartebeest_memc_push_local_qp(
+                    scot::helper::key_generator(keyset[KEY_QP], lnid, rnid, qpool_sid).c_str(),
+                    HBKEY_PD,
+                    scot::helper::key_generator(keyset[KEY_QP], lnid, rnid, qpool_sid).c_str()
+                );
+                assert(is_pushed == true);
+            }
+        }
+    }
+
+
+    void prepare_reader_asset(
+        scot::MessageOut& out,
+        scot::ScotConnContextPool& writer_pool, const char** keyset) {
+
+#ifdef __DEBUG__
+        __SCOT_INFO__(out, "→ {} start.", __func__);
+#endif
+
+        // initializes replicator assets
+        int lnid = writer_pool.get_local_nid();
+        
+        size_t aligned_offset = (SCOT_BUFFER_SZ / writer_pool.get_qp_pool_sz());
+        if (aligned_offset % sizeof(SCOT_LOGALIGN_T) != 0) {
+            aligned_offset -= (aligned_offset % sizeof(SCOT_LOGALIGN_T));
+        }
+
+        for (int rnid = 0; rnid < writer_pool.get_quorum_sz(); rnid++) {
+
+            if (rnid == lnid) continue;
+
+            // 1. Make MR, One-per-remote, and push to Memcached
+            hartebeest_create_local_mr(
+                HBKEY_PD, scot::helper::key_generator(keyset[KEY_MR], lnid, rnid).c_str(), SCOT_BUFFER_SZ,
+                0 | IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_READ | IBV_ACCESS_REMOTE_WRITE
+            );
+
+            bool is_pushed = hartebeest_memc_push_local_mr(
+                scot::helper::key_generator(keyset[KEY_MR], lnid, rnid).c_str(),
+                HBKEY_PD,
+                scot::helper::key_generator(keyset[KEY_MR], lnid, rnid).c_str()
+            );
+
+            // 2. For each remote pool ctx, that access this MR,
+            for (int qpool_sid = 0; qpool_sid < writer_pool.get_qp_pool_sz(); qpool_sid++) {
+
+                // 1. Create SEND Queue
+                hartebeest_create_basiccq(
+                    scot::helper::key_generator(keyset[KEY_SCQ], lnid, rnid, qpool_sid).c_str());
+
+                // 2. Create RECV Queue
+                hartebeest_create_basiccq(
+                    scot::helper::key_generator(keyset[KEY_RCQ], lnid, rnid, qpool_sid).c_str());
+
+                // 3. Create Queue Pair
+                hartebeest_create_local_qp(
+                    HBKEY_PD, 
+                    scot::helper::key_generator(keyset[KEY_QP], lnid, rnid, qpool_sid).c_str(),
+                    IBV_QPT_RC,
+                    scot::helper::key_generator(keyset[KEY_SCQ], lnid, rnid, qpool_sid).c_str(),
+                    scot::helper::key_generator(keyset[KEY_RCQ], lnid, rnid, qpool_sid).c_str()
+                );
+
+                hartebeest_init_local_qp(
+                    HBKEY_PD,
+                    scot::helper::key_generator(keyset[KEY_QP], lnid, rnid, qpool_sid).c_str()
+                );
+
+                // 4. Push to Memcached
+                is_pushed = hartebeest_memc_push_local_qp(
+                    scot::helper::key_generator(keyset[KEY_QP], lnid, rnid, qpool_sid).c_str(),
+                    HBKEY_PD,
+                    scot::helper::key_generator(keyset[KEY_QP], lnid, rnid, qpool_sid).c_str()
+                );
+                assert(is_pushed == true);
+
+
+                // 5. Initialize local area.
+                struct ScotAlignedLog* llog = 
+                    reinterpret_cast<struct ScotAlignedLog*>(
+                        hartebeest_get_local_mr(
+                                HBKEY_PD, 
+                                scot::helper::key_generator(keyset[KEY_MR], lnid, rnid).c_str()
+                            )->addr);
+
+                llog = reinterpret_cast<struct ScotAlignedLog*>(
+                    uintptr_t(llog) + uintptr_t(qpool_sid * aligned_offset));
+            
+                llog->aligned = reinterpret_cast<SCOT_LOGALIGN_T*>(
+                    uintptr_t(llog) + sizeof(struct ScotAlignedLog)
+                );
+
+                llog->bound = aligned_offset;
+                llog->reserved[SCOT_RESERVED_IDX_FREE] = 4;
+
+            }
+        }
+    }
+
+
+    // Fetches remote assets
+    void connect_rw_and_build_pool(
+        scot::MessageOut& out,
+        scot::ScotConnContextPool& writer_pool, const char** writer_keyset, const char** reader_keyset) {
+        
+        int lnid = writer_pool.get_local_nid();
+
+        size_t aligned_offset = (SCOT_BUFFER_SZ / writer_pool.get_qp_pool_sz());
+        if (aligned_offset % sizeof(SCOT_LOGALIGN_T) != 0) {
+            aligned_offset -= (aligned_offset % sizeof(SCOT_LOGALIGN_T));
+        }
+
+#ifdef __DEBUG__
+        __SCOT_INFO__(out, "→ {} start, build & connecting writers.", __func__);
+#endif
+        
+        // For replicator module:
+        int qpool_sid = 0;  // QP Pool Set ID
+        for (auto& ctx_pool: writer_pool.get_pool_list()) {
+            
+            for (int rnid = 0; rnid < writer_pool.get_quorum_sz(); rnid++) {
+
+                if (rnid == lnid) continue;
+            
+                scot::ConnContext ctx_elem(rnid);
+
+                ctx_elem.qpool_sid = qpool_sid;
+                ctx_elem.offset = qpool_sid * aligned_offset;
+
+                // Initialize as a log area                
+                // 1. Register Local MR/QP
+                ctx_elem.local.mr = hartebeest_get_local_mr(
+                    HBKEY_PD, scot::helper::key_generator(writer_keyset[KEY_MR]).c_str());
+
+                struct ScotAlignedLog* log = reinterpret_cast<struct ScotAlignedLog*>(
+                    uintptr_t(ctx_elem.local.mr->addr) + uintptr_t(ctx_elem.offset)
+                );
+
+                // 2. Local area initialize.
+                log->aligned = reinterpret_cast<SCOT_LOGALIGN_T*>(
+                    uintptr_t(ctx_elem.local.mr->addr) + uintptr_t(ctx_elem.offset) + sizeof(struct ScotAlignedLog)
+                );
+
+                // printf("%s %p aligned\n", __func__, log->aligned);
+
+                log->bound = aligned_offset;
+                log->reserved[SCOT_RESERVED_IDX_FREE] = 4; // Next?
+
+                assert((reinterpret_cast<uintptr_t>(ctx_elem.local.mr) % sizeof(SCOT_LOGALIGN_T)) == 0);
+
+                ctx_elem.local.qp = hartebeest_get_local_qp(
+                    HBKEY_PD, scot::helper::key_generator(writer_keyset[KEY_QP], lnid, rnid, qpool_sid).c_str());
+
+                // 3. Fetch Remote MR/QP Info from Memcached
+                hartebeest_memc_fetch_remote_mr(
+                    scot::helper::key_generator(reader_keyset[KEY_MR], rnid, lnid).c_str());
+
+#ifdef __DEBUG__
+                __SCOT_INFO__(out, "→ Fetched: {}, for {}", 
+                    scot::helper::key_generator(reader_keyset[KEY_MR], rnid, lnid).c_str(), qpool_sid);
+#endif
+
+                hartebeest_memc_fetch_remote_qp(
+                    scot::helper::key_generator(reader_keyset[KEY_QP], rnid, lnid, qpool_sid).c_str());
+
+#ifdef __DEBUG__
+                __SCOT_INFO__(out, "→ Fetched: {}", 
+                    scot::helper::key_generator(reader_keyset[KEY_QP], rnid, lnid, qpool_sid).c_str());
+#endif
+
+                ctx_elem.remote.mr = hartebeest_get_remote_mr(
+                    scot::helper::key_generator(reader_keyset[KEY_MR], rnid, lnid).c_str()
+                );
+
+                hartebeest_connect_local_qp(
+                    HBKEY_PD, 
+                    scot::helper::key_generator(writer_keyset[KEY_QP], lnid, rnid, qpool_sid).c_str(),
+                    scot::helper::key_generator(reader_keyset[KEY_QP], rnid, lnid, qpool_sid).c_str());
+
+                ctx_pool.push_back(std::move(ctx_elem));
+            }
+
+            qpool_sid++;
+        }
+
+        assert(writer_pool.get_pool_list().size() == writer_pool.get_qp_pool_sz());
+
+#ifdef __DEBUG__
+        __SCOT_INFO__(out, "→ Now, connecting readers.");
+#endif
+
+        // Connect receiver side
+        for (int rnid = 0; rnid < writer_pool.get_quorum_sz(); rnid++) {
+
+            if (rnid == lnid) continue;
+
+            for (int qpool_sid = 0; qpool_sid < writer_pool.get_qp_pool_sz(); qpool_sid++) {
+
+// #ifdef __DEBUG__
+//         __SCOT_INFO__(out, "→ Waiting: {}", scot::helper::key_generator(writer_keyset[KEY_QP], rnid, lnid, qpool_sid).c_str());
+// #endif
+                
+                hartebeest_memc_fetch_remote_qp(
+                    scot::helper::key_generator(writer_keyset[KEY_QP], rnid, lnid, qpool_sid).c_str());
+
+                hartebeest_connect_local_qp(
+                    HBKEY_PD,
+                    scot::helper::key_generator(reader_keyset[KEY_QP], lnid, rnid, qpool_sid).c_str(),
+                    scot::helper::key_generator(writer_keyset[KEY_QP], rnid, lnid, qpool_sid).c_str()
+                );
+            }
+        }
+
+#ifdef __DEBUG__
+        __SCOT_INFO__(out, "→ {} end.", __func__);
+#endif
+
+    }
+
+
+    // Alert wait
+    void notify_wait(
+        scot::MessageOut& out,
+        scot::ScotConnContextPool& rpli_pool) {
+        
+        // Notify others: "I AM FINISHED"
+        hartebeest_memc_push_general(
+            (std::to_string(rpli_pool.get_local_nid()) + "-wait").c_str());
+
+        for (auto& ctx: rpli_pool.get_pool_list().at(0)) {
+            hartebeest_memc_wait_general(
+                (std::to_string(ctx.rnid) + "-wait").c_str()
+            );
+        }
+    }
 }
 
 
@@ -50,260 +406,121 @@ void scot::ScotConnection::__init_hartebeest() {
     
     // Initialize Hartebeest
     hartebeest_init();
-    hartebeest_create_local_pd(HBKEY_PD);
     
-    // Initialize Writers MR
-    hartebeest_create_local_mr(
-        HBKEY_PD, wkey_helper(rpli_ks[KEY_MR]).c_str(), SCOT_BUFFER_SZ,
-        0 | IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_READ | IBV_ACCESS_REMOTE_WRITE
-    );
+    ::helper::init_pd(HBKEY_PD);
 
-    hartebeest_create_local_mr(
-        HBKEY_PD, wkey_helper(chkr_ks[KEY_MR]).c_str(), SCOT_BUFFER_SZ,
-        0 | IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_READ | IBV_ACCESS_REMOTE_WRITE
-    );
+    assert(ctx_pool_rpli != nullptr);
+    assert(ctx_pool_chkr != nullptr);
+    assert(ctx_pool_drmr != nullptr);
 
-    // Heartbeat scoreboard
-    hartebeest_create_local_mr(
-        HBKEY_PD, wkey_helper(HBKEY_MR_HBTR, std::stoi(nid)).c_str(), sizeof(struct ScotScoreboard),
-        0 | IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_READ | IBV_ACCESS_REMOTE_WRITE
-    );
+    // helper::prepare_rpli_asset(*ctx_pool_rpli);
+    // helper::prepare_rply_asset(*ctx_pool_rpli);
 
-    hartebeest_memc_push_local_mr(
-        wkey_helper(HBKEY_MR_HBTR, std::stoi(nid)).c_str(), 
-        HBKEY_PD, wkey_helper(HBKEY_MR_HBTR, std::stoi(nid)).c_str());
+    // Create RDMA resource
+    ::helper::prepare_writer_asset(out, *ctx_pool_rpli, ::helper::rpli_ks);
+    ::helper::prepare_reader_asset(out, *ctx_pool_rpli, ::helper::rply_ks);
 
-    struct ibv_mr* rpli_mr = hartebeest_get_local_mr(HBKEY_PD, wkey_helper(rpli_ks[KEY_MR]).c_str());
-    struct ibv_mr* chkr_mr = hartebeest_get_local_mr(HBKEY_PD, wkey_helper(chkr_ks[KEY_MR]).c_str());
-    struct ibv_mr* hbtr_mr = hartebeest_get_local_mr(HBKEY_PD, wkey_helper(HBKEY_MR_HBTR, std::stoi(nid)).c_str());
+    // Prepare free queue
+    for (auto& qlist: ctx_pool_rpli->get_pool_list())
+        ctx_pool_rpli->push_qlist(&qlist);
 
-    for (auto& ctx: quroum_conns) {
-    
-#define __KEY_MR__(SET, HELPER)     (HELPER(SET[KEY_MR], std::stoi(nid), ctx.nid).c_str())
-#define __KEY_QP__(SET, HELPER)     (HELPER(SET[KEY_QP], std::stoi(nid), ctx.nid).c_str())
-#define __KEY_SCQ__(SET, HELPER)    (HELPER(SET[KEY_SCQ], std::stoi(nid), ctx.nid).c_str())
-#define __KEY_RCQ__(SET, HELPER)    (HELPER(SET[KEY_RCQ], std::stoi(nid), ctx.nid).c_str())
+    ::helper::prepare_writer_asset(out, *ctx_pool_chkr, ::helper::chkr_ks);
+    ::helper::prepare_reader_asset(out, *ctx_pool_chkr, ::helper::rcvr_ks);
 
-        //
-        // Start Writers QP
-        hartebeest_create_basiccq(__KEY_SCQ__(rpli_ks, wkey_helper));
-        hartebeest_create_basiccq(__KEY_RCQ__(rpli_ks, wkey_helper));
-        hartebeest_create_basiccq(__KEY_SCQ__(chkr_ks, wkey_helper));
-        hartebeest_create_basiccq(__KEY_RCQ__(chkr_ks, wkey_helper));
+    for (auto& qlist: ctx_pool_chkr->get_pool_list())
+        ctx_pool_chkr->push_qlist(&qlist);
 
-        hartebeest_create_local_qp(
-            HBKEY_PD, __KEY_QP__(rpli_ks, wkey_helper), IBV_QPT_RC, 
-            __KEY_SCQ__(rpli_ks, wkey_helper),__KEY_RCQ__(rpli_ks, wkey_helper));
-        hartebeest_create_local_qp(
-            HBKEY_PD, __KEY_QP__(chkr_ks, wkey_helper), IBV_QPT_RC, 
-            __KEY_SCQ__(chkr_ks, wkey_helper),__KEY_RCQ__(chkr_ks, wkey_helper));
+    ::helper::connect_rw_and_build_pool(
+        out, *ctx_pool_rpli, ::helper::rpli_ks, ::helper::rply_ks);
 
-        hartebeest_init_local_qp(HBKEY_PD, __KEY_QP__(rpli_ks, wkey_helper));
-        hartebeest_init_local_qp(HBKEY_PD, __KEY_QP__(chkr_ks, wkey_helper));
+    ::helper::connect_rw_and_build_pool(
+        out, *ctx_pool_chkr, ::helper::chkr_ks, ::helper::rcvr_ks);
 
-        ctx.local.rpli_qp = hartebeest_get_local_qp(HBKEY_PD, __KEY_QP__(rpli_ks, wkey_helper));
-        ctx.local.chkr_qp = hartebeest_get_local_qp(HBKEY_PD, __KEY_QP__(chkr_ks, wkey_helper));
+    ::helper::notify_wait(out, *ctx_pool_rpli);
 
-        ctx.local.rpli_mr = rpli_mr;
-        ctx.local.chkr_mr = chkr_mr;
-
-        bool is_pushed = hartebeest_memc_push_local_qp(
-            __KEY_QP__(rpli_ks, wkey_helper), HBKEY_PD, __KEY_QP__(rpli_ks, wkey_helper));
-        assert(is_pushed == true);
-
-        is_pushed = hartebeest_memc_push_local_qp(
-            __KEY_QP__(chkr_ks, wkey_helper), HBKEY_PD, __KEY_QP__(chkr_ks, wkey_helper));
-        assert(is_pushed == true);
-
-        //
-        // Start Receiver QP
-        hartebeest_create_basiccq(__KEY_SCQ__(rply_ks, rkey_helper));
-        hartebeest_create_basiccq(__KEY_RCQ__(rply_ks, rkey_helper));
-        hartebeest_create_basiccq(__KEY_SCQ__(rcvr_ks, rkey_helper));
-        hartebeest_create_basiccq(__KEY_RCQ__(rcvr_ks, rkey_helper));
-
-        hartebeest_create_local_mr(
-            HBKEY_PD, __KEY_MR__(rply_ks, rkey_helper), SCOT_BUFFER_SZ,
-            0 | IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_READ | IBV_ACCESS_REMOTE_WRITE
-        );
-        hartebeest_create_local_mr(
-            HBKEY_PD, __KEY_MR__(rcvr_ks, rkey_helper), SCOT_BUFFER_SZ,
-            0 | IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_READ | IBV_ACCESS_REMOTE_WRITE
-        );
-
-        hartebeest_create_local_qp(
-            HBKEY_PD, __KEY_QP__(rply_ks, rkey_helper), IBV_QPT_RC, 
-            __KEY_SCQ__(rply_ks, rkey_helper),__KEY_RCQ__(rply_ks, rkey_helper));
-        hartebeest_create_local_qp(
-            HBKEY_PD, __KEY_QP__(rcvr_ks, rkey_helper), IBV_QPT_RC, 
-            __KEY_SCQ__(rcvr_ks, rkey_helper),__KEY_RCQ__(rcvr_ks, rkey_helper));
-
-        hartebeest_init_local_qp(HBKEY_PD, __KEY_QP__(rply_ks, rkey_helper));
-        hartebeest_init_local_qp(HBKEY_PD, __KEY_QP__(rcvr_ks, rkey_helper));
-
-        is_pushed = hartebeest_memc_push_local_qp(
-            __KEY_QP__(rply_ks, rkey_helper), HBKEY_PD, __KEY_QP__(rply_ks, rkey_helper));
-        assert(is_pushed == true);
-        is_pushed = hartebeest_memc_push_local_mr(
-            __KEY_MR__(rply_ks, rkey_helper), HBKEY_PD, __KEY_MR__(rply_ks, rkey_helper));
-        assert(is_pushed == true);
-
-        is_pushed = hartebeest_memc_push_local_qp(
-            __KEY_QP__(rcvr_ks, rkey_helper), HBKEY_PD, __KEY_QP__(rcvr_ks, rkey_helper));
-        assert(is_pushed == true);
-        is_pushed = hartebeest_memc_push_local_mr(
-            __KEY_MR__(rcvr_ks, rkey_helper), HBKEY_PD, __KEY_MR__(rcvr_ks, rkey_helper));
-        assert(is_pushed == true);
-
-// Heartbeat-related
-#define __KEY_QP_HB_LOCAL__         (wkey_helper(HBKEY_QP_HBTR, std::stoi(nid), ctx.nid).c_str())
-#define __KEY_QP_HB_REMOTE__        (rkey_helper(HBKEY_QP_HBTR, std::stoi(nid), ctx.nid).c_str())
-#define __KEY_SCQ_HB_LOCAL__        (wkey_helper(HBKEY_SCQ_HBTR, std::stoi(nid), ctx.nid).c_str())
-#define __KEY_RCQ_HB_LOCAL__        (wkey_helper(HBKEY_RCQ_HBTR, std::stoi(nid), ctx.nid).c_str())
-        
-        //
-        // Start Hartbeat QPs
-        hartebeest_create_basiccq(__KEY_SCQ_HB_LOCAL__);
-        hartebeest_create_basiccq(__KEY_RCQ_HB_LOCAL__);
-
-        hartebeest_create_local_qp(
-            HBKEY_PD, __KEY_QP_HB_LOCAL__, IBV_QPT_RC, __KEY_SCQ_HB_LOCAL__, __KEY_RCQ_HB_LOCAL__);
-        
-        hartebeest_init_local_qp(HBKEY_PD, __KEY_QP_HB_LOCAL__);
-        is_pushed = hartebeest_memc_push_local_qp(
-            __KEY_QP_HB_LOCAL__, HBKEY_PD, __KEY_QP_HB_LOCAL__);
-        assert(is_pushed == true);
-
-        ctx.local.hbtr_mr = hbtr_mr;
-        ctx.local.hbtr_qp = hartebeest_get_local_qp(HBKEY_PD, __KEY_QP_HB_LOCAL__);
-    } 
 }
 
 
 void scot::ScotConnection::__finalize_hartebeest() {
-    
-    for (auto& ctx: quroum_conns) {
-        hartebeest_memc_del_general(__KEY_QP__(rpli_ks, wkey_helper));
-        hartebeest_memc_del_general(__KEY_QP__(chkr_ks, wkey_helper));
 
-        hartebeest_memc_del_general(__KEY_QP__(rply_ks, rkey_helper));
-        hartebeest_memc_del_general(__KEY_QP__(rcvr_ks, rkey_helper));
-
-        hartebeest_memc_del_general(__KEY_MR__(rply_ks, rkey_helper));
-        hartebeest_memc_del_general(__KEY_MR__(rcvr_ks, rkey_helper));
-    }
 }
 
 
-void scot::ScotConnection::__connect_qps() {
-    
-    for (auto& ctx: quroum_conns) {
-        
-        // For writers : Replicator & Remote Replayers, Checker & Remote Receivers
-        hartebeest_memc_fetch_remote_mr(__KEY_MR__(rply_ks, wkey_helper));  // Me writing to Remote.
-        hartebeest_memc_fetch_remote_qp(__KEY_QP__(rply_ks, wkey_helper));  // Me writing to Remote.
-        ctx.remote.rply_mr = hartebeest_get_remote_mr(__KEY_MR__(rply_ks, wkey_helper));
-        
-        hartebeest_connect_local_qp(
-            HBKEY_PD, 
-            __KEY_QP__(rpli_ks, wkey_helper),
-            __KEY_QP__(rply_ks, wkey_helper)
-        );
-
-        hartebeest_memc_fetch_remote_mr(__KEY_MR__(rcvr_ks, wkey_helper));  // Me writing to Remote.
-        hartebeest_memc_fetch_remote_qp(__KEY_QP__(rcvr_ks, wkey_helper));  // Me writing to Remote.
-        ctx.remote.rcvr_mr = hartebeest_get_remote_mr(__KEY_MR__(rcvr_ks, wkey_helper));
-        
-        hartebeest_connect_local_qp(
-            HBKEY_PD, 
-            __KEY_QP__(chkr_ks, wkey_helper),
-            __KEY_QP__(rcvr_ks, wkey_helper)
-        );
-
-        // For Readers : Local Replayers
-        hartebeest_memc_fetch_remote_qp(__KEY_QP__(rpli_ks, rkey_helper));  // Me being wrtten from Remote.
-        hartebeest_connect_local_qp(
-            HBKEY_PD, 
-            __KEY_QP__(rply_ks, rkey_helper),
-            __KEY_QP__(rpli_ks, rkey_helper)
-        );
-
-        hartebeest_memc_fetch_remote_qp(__KEY_QP__(chkr_ks, rkey_helper));  // Me being wrtten from Remote.
-        hartebeest_connect_local_qp(
-            HBKEY_PD, 
-            __KEY_QP__(rcvr_ks, rkey_helper),
-            __KEY_QP__(chkr_ks, rkey_helper)
-        );
-
-        // For Hearbeat:
-        hartebeest_memc_fetch_remote_mr(
-            wkey_helper(HBKEY_MR_HBTR, std::stoi(nid)).c_str()
-        );
-        hartebeest_memc_fetch_remote_qp(__KEY_QP_HB_REMOTE__);
-        hartebeest_connect_local_qp(
-            HBKEY_PD, 
-            __KEY_QP_HB_LOCAL__,
-            __KEY_QP_HB_REMOTE__
-        );
-
-        ctx.remote.hbtr_mr = hartebeest_get_remote_mr(
-            wkey_helper(HBKEY_MR_HBTR, std::stoi(nid)).c_str()
-        );
-
-    }
-}
-
-
-void scot::ScotConnection::__wait_connection() {
-
-    hartebeest_memc_push_general((nid + "-wait").c_str());
-
-    for (auto& ctx: quroum_conns) {
-        hartebeest_memc_wait_general((std::to_string(ctx.nid) + "-wait").c_str());
-    }
-}
-
-
-scot::ScotConnection::ScotConnection() {
+scot::ScotConnection::ScotConnection() 
+    : ctx_pool_rpli(nullptr), ctx_pool_chkr(nullptr), ctx_pool_drmr(nullptr), out("conn") {
 
     // Configure Quorum
-    nid = hartebeest_get_sysvar(SCOT_ENVVAR_NID);
-    quorum_sz = std::stoi(
+    nid = std::stoi(
+        std::string(hartebeest_get_sysvar(SCOT_ENVVAR_NID))
+    );
+
+    int quorum_sz = std::stoi(
         std::string(getenv(SCOT_ENVVAR_QSZ))
     );
 
-    // Record all ids
-    for (int id = 0; id < quorum_sz; id++) {
-        if (id != get_my_nid())
-            quroum_conns.push_back(ConnContext(id));
-    }
-    
+    qsz = quorum_sz;
+
+    int qp_pool_sz = std::stoi(
+        std::string(getenv(SCOT_ENVVAR_QPOOLSZ))
+    );
+
+    assert(qp_pool_sz < SCOT_MAX_QPOOLSZ);
+
+    ctx_pool_rpli = new ScotConnContextPool(nid, quorum_sz, qp_pool_sz);
+    ctx_pool_chkr = new ScotConnContextPool(nid, quorum_sz, qp_pool_sz);
+    ctx_pool_drmr = new ScotConnContextPool(nid, quorum_sz, qp_pool_sz);
+
     __init_hartebeest();
-    {
-        __connect_qps();
-        __wait_connection();
-    }
+}
+
+
+scot::ScotConnection::~ScotConnection() {
+
+    if (ctx_pool_rpli != nullptr)
+        delete ctx_pool_rpli;
+
+    if (ctx_pool_chkr != nullptr)
+        delete ctx_pool_chkr;
+
+    if (ctx_pool_drmr != nullptr)
+        delete ctx_pool_drmr;
+
     __finalize_hartebeest();
 }
 
 
 int scot::ScotConnection::get_my_nid() {
-    return std::stoi(nid);
+    return nid;
 }
 
 
 int scot::ScotConnection::get_quorum_sz() {
-    return quorum_sz;
+    return qsz;
 }
 
-std::vector<struct scot::ConnContext>& scot::ScotConnection::get_quorum() {
-    return quroum_conns;
-}
+
 
 void scot::ScotConnection::start() {
 
 }
 
+
 void scot::ScotConnection::end() {
-    
+
 }
+
+
+scot::ScotConnContextPool* scot::ScotConnection::get_rpli_ctx_pool() {
+    return ctx_pool_rpli;
+}
+
+
+scot::ScotConnContextPool* scot::ScotConnection::get_chkr_ctx_pool() {
+    return ctx_pool_chkr;
+}
+
+
+scot::ScotConnContextPool* scot::ScotConnection::get_drmr_ctx_pool() {
+    return ctx_pool_drmr;
+}
+

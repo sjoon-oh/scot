@@ -51,24 +51,7 @@ uint64_t scot::ScotConfLoader::get_confval(const char* key) {
 }
 
 
-scot::ScotWriter::ScotWriter(SCOT_LOGALIGN_T* addr) : log(addr) {
-    writer_lock.clear();
-}
-
-
-SCOT_LOGALIGN_T* scot::ScotWriter::get_base() {
-    return log.get_base();
-}
-
-
-scot::ScotReader::ScotReader(
-        SCOT_LOGALIGN_T* addr) 
-    : log(addr) {
-
-}
-
-
-scot::ScotCore::ScotCore(SCOT_USRACTION ext_func) : msg_out("scot-core"), rc_inline_max(0) {
+scot::ScotCore::ScotCore(SCOT_USRACTION ext_func) : msg_out("scot-core") {
 
     __SCOT_INFO__(msg_out, "Core init start.");
 
@@ -77,60 +60,71 @@ scot::ScotCore::ScotCore(SCOT_USRACTION ext_func) : msg_out("scot-core"), rc_inl
 
     nid = ScotConnection::get_instance().get_my_nid();
     qsize = ScotConnection::get_instance().get_quorum_sz();
+    qpool_size = ScotConnection::get_instance().get_rpli_ctx_pool()->get_qp_pool_sz();
 
     // Configuration value settings
-    rc_inline_max = ldr.get_confval("inline-max");
-    prefetch_size = ldr.get_confval("prefetch-size");
+    uint64_t prefetch_size = ldr.get_confval("prefetch-size");
 
-    rpli = new ScotReplicator(
-            reinterpret_cast<SCOT_LOGALIGN_T*>(
-                hartebeest_get_local_mr(
-                    HBKEY_PD, wkey_helper(HBKEY_MR_RPLI).c_str())->addr),
-            prefetch_size
+    ext_confvar.insert(
+        std::pair<std::string, uint64_t>(std::string("inline-max"), ldr.get_confval("inline-max"))
     );
+
+    ext_confvar.insert(
+        std::pair<std::string, uint64_t>(std::string("prefetch-size"), prefetch_size)
+    );
+
     
+    rpli = new ScotReplicator(ScotConnection::get_instance().get_rpli_ctx_pool());
     __SCOT_INFO__(msg_out, "→ A Replicator initiated: 0x{:x}", uintptr_t(rpli));
 
-    chkr = new ScotChecker(
-            reinterpret_cast<SCOT_LOGALIGN_T*>(
-                hartebeest_get_local_mr(
-                    HBKEY_PD, wkey_helper(HBKEY_MR_CHKR).c_str())->addr)
-    );
-
+    chkr = new ScotChecker(ScotConnection::get_instance().get_chkr_ctx_pool());
     __SCOT_INFO__(msg_out, "→ A Checker initiated: 0x{:x}", uintptr_t(chkr));
-    
-    struct ibv_mr* mr = nullptr;
-    for (auto& ctx: ScotConnection::get_instance().get_quorum()) {
+
+    struct ibv_mr* mr = nullptr;    
+    for (auto& ctx_pool: 
+        ScotConnection::get_instance().get_rpli_ctx_pool()->get_pool_list().at(0)) {
         
-        mr = hartebeest_get_local_mr(HBKEY_PD, rkey_helper(HBKEY_MR_RPLY, nid, ctx.nid).c_str());
+        mr = hartebeest_get_local_mr(HBKEY_PD, 
+            scot::helper::key_generator(HBKEY_MR_RPLY, nid, ctx_pool.rnid).c_str());
         vec_rply.push_back(
             new ScotReplayer(
-                reinterpret_cast<SCOT_LOGALIGN_T*>(mr->addr), ctx.nid, chkr, ext_func)
+                ctx_pool.rnid, 
+                reinterpret_cast<SCOT_LOGALIGN_T*>(mr->addr), 
+                ScotConnection::get_instance().get_rpli_ctx_pool(),
+                chkr, 
+                ext_func)
         );
 
-        vec_rply.back()->worker_spawn();
+        __SCOT_INFO__(msg_out, "→ Replayer({}) added, MR base(0x{:x})", ctx_pool.rnid, uintptr_t(mr->addr));
+
+        vec_rply.back()->distr_spawn();
     }
 
-    __SCOT_INFO__(msg_out, "→ All Replayers spawned.");
+    for (auto& ctx_pool: 
+        ScotConnection::get_instance().get_chkr_ctx_pool()->get_pool_list().at(0)) {
 
-        for (auto& ctx: ScotConnection::get_instance().get_quorum()) {
-        
-        mr = hartebeest_get_local_mr(HBKEY_PD, rkey_helper(HBKEY_MR_RCVR, nid, ctx.nid).c_str());
+        mr = hartebeest_get_local_mr(HBKEY_PD, 
+            scot::helper::key_generator(HBKEY_MR_RCVR, nid, ctx_pool.rnid).c_str());
         vec_rcvr.push_back(
             new ScotReceiver(
-                reinterpret_cast<SCOT_LOGALIGN_T*>(mr->addr), ctx.nid, rpli, ext_func)
+                ctx_pool.rnid, 
+                reinterpret_cast<SCOT_LOGALIGN_T*>(mr->addr),
+                ScotConnection::get_instance().get_chkr_ctx_pool(),
+                rpli,
+                ext_func
+            )
         );
+
+        __SCOT_INFO__(msg_out, "→ Receiver({}) added.", ctx_pool.rnid);
 
         vec_rcvr.back()->worker_spawn();
     }
-
-    __SCOT_INFO__(msg_out, "→ All Receivers spawned.");
     
     if (ext_func != nullptr)
         __SCOT_INFO__(msg_out, "→ Replay function registered.");
 
     for (auto& rply: vec_rply) {
-        rply->worker_signal_toggle(SCOT_WRKR_PAUSE); // Disable pause
+        rply->distr_signal_toggle(SCOT_WRKR_PAUSE); // Disable pause
     }
 
     for (auto& rcvr: vec_rcvr) {

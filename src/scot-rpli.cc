@@ -46,8 +46,15 @@ struct ScotSlotEntry* scot::ScotReplicator::ScotReplicator::__ht_get_latest_entr
 }
 
 
-scot::ScotReplicator::ScotReplicator(SCOT_LOGALIGN_T* addr, uint32_t ps)
-    : ScotWriter(addr), hasht(SCOT_HT_SIZE, scot_hash_cmp), msg_out("rpli"), pf_size(ps) { 
+scot::ScotReplicator::ScotReplicator(scot::ScotConnContextPool* pool)
+    : hasht(SCOT_HT_SIZE, scot_hash_cmp), msg_out("rpli"), ctx_pool(pool) { 
+    
+    assert(ctx_pool != nullptr);
+}
+
+
+scot::ScotReplicator::ScotReplicator(uint32_t ps)
+    : hasht(SCOT_HT_SIZE, scot_hash_cmp), msg_out("rpli"), pf_size(ps) { 
 
 }
 
@@ -88,110 +95,101 @@ bool scot::ScotReplicator::write_request(
     int pf_count = 0;
 
     __ht_try_insert(curr);
-    __START_WRITE__ {
+    // __START_WRITE__ {
 
-        latest = __ht_get_latest_entry(curr);
-        // latest = curr;
+    latest = __ht_get_latest_entry(curr);
+    // latest = curr;
 
-        // Am I marked as deleted? 
-        // Or am I already replicated by prefetch?
-        if (!IS_MARKED_AS_DELETED(latest->next) && (latest->ready != 0)) {
+    // Am I marked as deleted? 
+    // Or am I already replicated by prefetch?
+    if (!IS_MARKED_AS_DELETED(latest->next) && (latest->ready != 0)) {
 
-            SCOT_OPTIMIZATION_START {
+        SCOT_OPTIMIZATION_START {
 
-                // Set prefetch size here.
-                // Dead nodes will be notified by quroum_conns.
-                size_t logsz = 0, pf_logsz = 0;
+            SCOT_QPOOL_START
 
-                header = log.write_local_log(latest); // At least, replicate this one.
-                logsz = sizeof(struct ScotMessageHeader) + 
-                    static_cast<size_t>(latest->buffer_sz) + sizeof(uint8_t);
-
-                // Make this the first.
-                reinterpret_cast<struct ScotMessageHeader*>(header)->msg |= SCOT_MSGTYPE_COMMPREV;
-
-                for (int i = 1; i < pf_size; i++) {
-                    
-                    if ((index + i) == (SCOT_SLOT_COUNTS - 1))
-                        break;
-
-                    curr = slot.get_slot_entry(index + i);
-                    if (curr->ready != 1)
-                        break;
-
-                    latest = __ht_get_latest_entry(curr);
-
-                    // Record to local MR
-                    pf_header = log.write_local_log(latest);
-                    pf_logsz = sizeof(struct ScotMessageHeader) + 
-                        static_cast<size_t>(latest->buffer_sz) + sizeof(uint8_t);
-
-                    pf_count++;
-                }
-
-                if (pf_count > 0)
-                    logsz = ((uintptr_t(pf_header) + pf_logsz) - uintptr_t(header));
-
-#ifdef __DEBUG__
-                __SCOT_INFO__(
-                    msg_out, "→→ Fetch count: {}, write size ({}) ", (pf_count), logsz
+            // This is blocking function.
+            std::vector<struct scot::ConnContext>* qlist = ctx_pool->pop_qlist();
+            
+            // Per-qpool
+            struct ScotAlignedLog* log = reinterpret_cast<struct ScotAlignedLog*>(
+                    uintptr_t((*qlist)[0].local.mr->addr) + uintptr_t((*qlist)[0].offset)
                 );
-#endif
+            
+            // Set prefetch size here.
+            // Dead nodes will be notified by quroum_conns.
+            size_t logsz = 0, pf_logsz = 0;
 
-                size_t offset = uintptr_t(header) - uintptr_t(log.get_base());
-                SCOT_LOGALIGN_T* remote_target_addr;
+            // header = log.write_local_log(latest); // At least, replicate this one.
+            header = write_local_log(log, latest, 0);
+            logsz = sizeof(struct ScotMessageHeader) + 
+                static_cast<size_t>(latest->buffer_sz) + sizeof(uint8_t);
 
-                bool ret = 0;
+            // Make this the first.
+            reinterpret_cast<struct ScotMessageHeader*>(header)->msg |= SCOT_MSGTYPE_COMMPREV;
 
-                // 
-                // Send WR first for all quorums
-                for (auto& ctx: ScotConnection::get_instance().get_quorum()) {
-                    
-                    remote_target_addr = 
-                        reinterpret_cast<SCOT_LOGALIGN_T*>(
-                                uintptr_t(ctx.remote.rply_mr->addr) + offset);
+            size_t offset = uintptr_t(header) - uintptr_t(log);
+            SCOT_LOGALIGN_T* remote_target_addr;
 
-                    ret = hartebeest_rdma_post_single_signaled_inline(
-                        ctx.local.rpli_qp,          // Local QP
-                        header,                     // Local starting point of a RDMA message
-                        remote_target_addr,         // To where at remote?
-                        logsz,                      // Total message size
-                        IBV_WR_RDMA_WRITE,
-                        ctx.local.rpli_mr->lkey,    // Local MR acces key
-                        ctx.remote.rply_mr->rkey,   // Remote MR access key
-                        ctx.nid);
+            bool ret = 0;
+
+            for (auto& ctx: (*qlist)) {
+
+                // size_t relative_offset = ctx.offset + offset;
+
+                remote_target_addr = 
+                    reinterpret_cast<SCOT_LOGALIGN_T*>(
+                            uintptr_t(ctx.remote.mr->addr) + uintptr_t(ctx.offset) + offset);
+
+                ret = hartebeest_rdma_post_single_signaled_inline(
+                    ctx.local.qp,           // Local QP
+                    header,                 // Local starting point of a RDMA message
+                    remote_target_addr,     // To where at remote?
+                    logsz,                  // Total message size
+                    IBV_WR_RDMA_WRITE,
+                    ctx.local.mr->lkey,     // Local MR acces key
+                    ctx.remote.mr->rkey,    // Remote MR access key
+                    ctx.rnid);
+                
 #ifdef __DEBUG__
-                    assert(ret != false);
+                assert(ret != false);
 #endif
+            }
+
+            //
+            // Wait for else.
+            // for (auto& ctx: ScotConnection::get_instance().get_quorum()) {
+            for (auto& ctx: (*qlist)) {
+                ret = hartebeest_rdma_send_poll(ctx.local.qp);
+#ifdef __DEBUG__
+                if (!ret) {
+                    __SCOT_INFO__(msg_out, "→→ Polling error.");
+                    assert(0);
                 }
-
-                //
-                // Wait for else.
-                for (auto& ctx: ScotConnection::get_instance().get_quorum()) {
-                    ret = hartebeest_rdma_send_poll(ctx.local.rpli_qp);
-#ifdef __DEBUG__
-                    if (!ret) {
-                        __SCOT_INFO__(msg_out, "→→ Polling error.");
-                        assert(0);
-                    }
 #endif
-                }
-      
-            } SCOT_OPTIMIZATION_END
-        }
-        else {
-#ifdef __DEBUG__
-            __SCOT_INFO__(msg_out, "→→ Pre-replicated, skipping.");
-#endif
-        }
+            }
 
-        latest->ready = latest->blocked = 0;
+            // Plz return after use.
+            // ScotConnection::get_instance().get_rpli_ctx_pool()->push_qlist(qlist);
+            ctx_pool->push_qlist(qlist);
+
+            SCOT_QPOOL_END
+    
+        } SCOT_OPTIMIZATION_END
+    }
+    else {
+#ifdef __DEBUG__
+        __SCOT_INFO__(msg_out, "→→ Pre-replicated, skipping.");
+#endif
+    }
+
+    latest->ready = latest->blocked = 0;
 
 #ifdef __DEBUG__
-        __SCOT_INFO__(msg_out, "→→ write_request end: {}", index);
+    __SCOT_INFO__(msg_out, "→→ write_request end: {}", index);
 #endif
 
-    } __END_WRITE__
+    // } __END_WRITE__
 
     if (slot.mark_entry_finished(index, latest, &hasht) == SCOT_SLOT_RESET) { // Reset comes here.
 #ifdef __DEBUG__

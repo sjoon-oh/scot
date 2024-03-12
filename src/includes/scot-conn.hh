@@ -8,63 +8,94 @@
 #include <map>
 #include <string>
 #include <vector>
+#include <queue>
+
+#include <mutex>
+#include <atomic>
 
 #include <infiniband/verbs.h>
 
+#include "./scot-mout.hh"
+
 namespace scot {
+
     struct ConnContext {
-        int nid;
+        int rnid;
+        int qpool_sid;
+        size_t offset;
+
         struct  {
-            struct ibv_qp* rpli_qp;     // Local connected QP
-            struct ibv_qp* chkr_qp;     // Local connected QP
-            struct ibv_qp* hbtr_qp;
-            struct ibv_mr* rpli_mr;
-            struct ibv_mr* chkr_mr;
-            struct ibv_mr* hbtr_mr;
+            struct ibv_qp* qp;     // Local connected QP
+            struct ibv_mr* mr;
         } local;
+
         struct {
-            struct ibv_mr* rply_mr;     // Local connected QP
-            struct ibv_mr* rcvr_mr;     // Local connected QP
-            struct ibv_mr* hbtr_mr;
+            struct ibv_mr* mr;     // Local connected QP
         } remote;
-        ConnContext(int nid) : nid(nid) { 
-            local = {nullptr, nullptr, nullptr, nullptr, nullptr, nullptr};
-            remote = {nullptr, nullptr, nullptr};
+        
+        ConnContext(int nid) : rnid(nid), qpool_sid(0), offset(0) { 
+            local = {nullptr, nullptr};
+            remote = {nullptr};
         }
     };
 
-    // Keygen Helper
 
-#define KEY_MR      0
-#define KEY_QP      1
-#define KEY_SCQ     2
-#define KEY_RCQ     3
+    namespace helper {
+        std::string key_generator(const char*, int = -1, int = -1, int = -1);
+    }
 
-    std::string wkey_helper(const char*, int = -1, int = -1);
-    std::string rkey_helper(const char*, int = -1, int = -1);
+
+    class ScotConnContextPool {
+    private:
+        int local_nid;
+        int quorum_sz;
+        int qp_pool_sz;
+
+        std::atomic_flag pool_lock = ATOMIC_FLAG_INIT;
+        std::atomic<int32_t> allowed;
+
+        std::vector<std::vector<struct ConnContext>> ctx_pool;
+        std::queue<std::vector<struct ConnContext>*> ctx_free;
+
+    public:
+        ScotConnContextPool(int, int, int);
+        ~ScotConnContextPool() = default;
+
+        std::vector<std::vector<struct ConnContext>>& get_pool_list();
+
+        int get_local_nid();
+        int get_quorum_sz();
+        int get_qp_pool_sz();
+
+        std::vector<struct ConnContext>* pop_qlist();
+        void push_qlist(std::vector<struct ConnContext>*);
+    };
+
 
     class ScotConnection {
     private:
-        std::string nid;
+        int nid;
+        int qsz;
         
-        int quorum_sz;
-        std::vector<struct ConnContext> quroum_conns;
+        // int qp_pool_sz;
+        // std::vector<struct ConnContext> quroum_conns;
+
+        ScotConnContextPool* ctx_pool_rpli;
+        ScotConnContextPool* ctx_pool_chkr;
+        ScotConnContextPool* ctx_pool_drmr;
+
+        MessageOut out;
 
         // Inner
         void __init_hartebeest();
         void __finalize_hartebeest();
 
-        void __connect_qps();
-        void __wait_connection();
-
     public:
         ScotConnection();
-        ~ScotConnection() = default;
+        ~ScotConnection();
 
         int get_my_nid();
         int get_quorum_sz();
-
-        std::vector<struct ConnContext>& get_quorum();
         
         static ScotConnection& get_instance() {
             static ScotConnection quorum;
@@ -73,5 +104,9 @@ namespace scot {
 
         void start();
         void end();
+
+        ScotConnContextPool* get_rpli_ctx_pool();
+        ScotConnContextPool* get_chkr_ctx_pool();
+        ScotConnContextPool* get_drmr_ctx_pool();
     };
 }

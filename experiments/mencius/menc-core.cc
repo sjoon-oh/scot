@@ -11,7 +11,7 @@
 
 
 scot_menc::ScotMenciusCore::ScotMenciusCore() 
-    : msg_out("scot-menc-core"), rc_inline_max(0) {
+    : msg_out("scot-menc-core") {
 
     __SCOT_INFO__(msg_out, "Core init start.");
 
@@ -21,7 +21,6 @@ scot_menc::ScotMenciusCore::ScotMenciusCore()
     nid = scot::ScotConnection::get_instance().get_my_nid();
     qsize = scot::ScotConnection::get_instance().get_quorum_sz();
 
-    rc_inline_max = ldr.get_confval("inline-max");
     menc_skip_delay = ldr.get_confval("mencius-skip-delay");
 
     rpli = new ScotMenciusReplicator(
