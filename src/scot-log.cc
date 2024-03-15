@@ -63,10 +63,6 @@ SCOT_LOGALIGN_T* scot::write_local_log(struct ScotAlignedLog* log, struct ScotSl
     SCOT_LOG_FINEGRAINED_T* pos = 
         FINEPTR_LOOKALIKE(&(log->aligned[cur_idx]));
 
-#ifdef __DEBUG__
-    std::cout << "WR: index " << cur_idx << std::endl;
-#endif
-
     //
     // 1. Record the message header
     struct ScotMessageHeader* header = reinterpret_cast<struct ScotMessageHeader*>(pos);
@@ -124,13 +120,15 @@ SCOT_LOGALIGN_T* scot::poll_message_blocked(struct ScotAlignedLog* log, uint8_t 
 
 #ifdef __DEBUG__
 
-    std::string mtype;
-    switch (rcv_header->msg) {
-        case SCOT_MSGTYPE_ACK: mtype = "ACK"; break;
-        case SCOT_MSGTYPE_PURE: mtype = "PURE"; break;
-        case SCOT_MSGTYPE_WAIT: mtype = "WAIT"; break;
-        case SCOT_MSGTYPE_HDRONLY: mtype = "HDR"; break;
-    }
+    std::string mtype("");
+    if (rcv_header->msg & SCOT_MSGTYPE_ACK)
+        mtype += "|ACK|";
+    if (rcv_header->msg & SCOT_MSGTYPE_PURE)
+        mtype += "|PURE|";
+    if (rcv_header->msg & SCOT_MSGTYPE_WAIT)
+        mtype += "|WAIT|";
+    if (rcv_header->msg & SCOT_MSGTYPE_HDRONLY)
+        mtype += "|HDR|";
 
     printf("Detected {hashv: %ld, bufsz: %ld, msg: %s, payload: %s}.\n", 
         rcv_header->hashv,
@@ -183,34 +181,11 @@ SCOT_LOGALIGN_T* scot::peek_message(struct ScotAlignedLog* log, uint8_t msg_dete
     // 1. Wait for message detect.
     uint8_t detect_type = 0;
     if ((detect_type = (rcv_header->msg & msg_detect)) == 0) {
-
-
         return nullptr;
     }
 
-    std::cout << "Detected: " << detect_type << std::endl;
-
     cur_idx += 2;
     pld_pos += uintptr_t(sizeof(struct ScotMessageHeader));
-
-#ifdef __DEBUG__
-
-    std::string mtype;
-    switch (rcv_header->msg) {
-        case SCOT_MSGTYPE_ACK: mtype = "ACK"; break;
-        case SCOT_MSGTYPE_PURE: mtype = "PURE"; break;
-        case SCOT_MSGTYPE_WAIT: mtype = "WAIT"; break;
-        case SCOT_MSGTYPE_HDRONLY: mtype = "HDR"; break;
-    }
-
-    printf("Detected {hashv: %ld, bufsz: %ld, msg: %s, payload: %s}.\n", 
-        rcv_header->hashv,
-        rcv_header->buf_sz,
-        mtype.c_str(),
-        (char*)pld_pos
-        );
-    
-#endif
 
     // rcv_header->msg = 0;
 
@@ -223,6 +198,26 @@ SCOT_LOGALIGN_T* scot::peek_message(struct ScotAlignedLog* log, uint8_t msg_dete
         else
             *(reinterpret_cast<uint8_t*>(cnry_pos)) = 0; // Reset canary value.
     }
+
+#ifdef __DEBUG__
+
+    std::string mtype("");
+    if (rcv_header->msg & SCOT_MSGTYPE_ACK)
+        mtype += "|ACK|";
+    if (rcv_header->msg & SCOT_MSGTYPE_PURE)
+        mtype += "|PURE|";
+    if (rcv_header->msg & SCOT_MSGTYPE_WAIT)
+        mtype += "|WAIT|";
+    if (rcv_header->msg & SCOT_MSGTYPE_HDRONLY)
+        mtype += "|HDR|";
+
+    printf("Detected {hashv: %ld, bufsz: %ld, msg: %s, payload: %s}.\n", 
+        rcv_header->hashv,
+        rcv_header->buf_sz,
+        mtype.c_str(),
+        (char*)pld_pos
+        );
+#endif
 
     log->reserved[SCOT_RESERVED_IDX_FREE] = cur_idx;
     cur_idx = next_aligned_idx(log, (rcv_header->buf_sz + sizeof(uint8_t)));

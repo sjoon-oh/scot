@@ -42,6 +42,12 @@ scot::ScotReplayer::~ScotReplayer() {
 }
 
 
+struct ReplayPair {
+    SCOT_LOG_FINEGRAINED_T* buffer;
+    size_t buffer_len;
+};
+
+
 #define IS_SIGNALED(SIGN)   (distr_signal & SIGN)
 void scot::ScotReplayer::__worker(
     uint32_t rply_id, 
@@ -61,22 +67,16 @@ void scot::ScotReplayer::__worker(
 #ifdef __DEBUG__
     for (auto base: base_list)
         __SCOT_INFO__(
-            lc_out, "base: 0x{:x}, aligned: 0x{:x}, idx: {}", 
+            lc_out, "→ base: 0x{:x}, aligned: 0x{:x}, idx: {}", 
                 uintptr_t(base), 
                 uintptr_t(reinterpret_cast<struct ScotAlignedLog*>(base)->aligned), 
                 reinterpret_cast<struct ScotAlignedLog*>(base)->reserved[SCOT_RESERVED_IDX_FREE]
         );
 #endif
 
-    struct ReplayPair {
-        SCOT_LOG_FINEGRAINED_T* buffer;
-        size_t buffer_len;
-    };
-
     // std::queue<struct ReplayPair> replayq_vec;
     
-    std::vector<std::queue<struct ReplayPair>> replayq_vec;
-    replayq_vec.resize(base_list.size());
+    std::vector<std::queue<struct ReplayPair>> replayq_vec(base_list.size());
 
     int idx = 0;
     while (1) {
@@ -86,12 +86,6 @@ void scot::ScotReplayer::__worker(
         idx = 0;
         for (auto base: base_list) {
 
-#ifdef __DEBUG__
-            // __SCOT_INFO__(
-            //     lc_out, "Before peek: 0x{:x}", uintptr_t(base)
-            // );
-#endif
-
             SCOT_LOG_FINEGRAINED_T* rcvd = 
                 FINEPTR_LOOKALIKE(
                     peek_message(
@@ -100,12 +94,7 @@ void scot::ScotReplayer::__worker(
                     )
                 );
 
-#ifdef __DEBUG__
-            // __SCOT_INFO__(
-            //     lc_out, "After peek: 0x{:x}", uintptr_t(rcvd)
-            // );
-#endif
-
+            // 
             // After peek, and if received the full message,
             if (rcvd != nullptr) {
                 replayq_vec.at(idx).push({
@@ -121,19 +110,24 @@ void scot::ScotReplayer::__worker(
                 // If commit, get latest.
                 if (MSGHDRPTR_LOOKALIKE(rcvd)->msg & SCOT_MSGTYPE_COMMPREV) {
                     
-                    if (replayq_vec.at(idx).size() > 0) {
+                    if (!replayq_vec.at(idx).empty()) {
                         // Launch thread here.
 
                         SCOT_LOG_FINEGRAINED_T* rep_buf = replayq_vec.at(idx).front().buffer;
                         size_t rep_buflen = replayq_vec.at(idx).front().buffer_len;
 
-                        spawned.push(std::thread(
-                            [&]() -> void { 
-                                if (ext_func != nullptr)
-                                    ext_func(rep_buf, rep_buflen);
-                                    
-                                MSGHDRPTR_LOOKALIKE(rcvd)->msg = SCOT_MSGTYPE_NONE;
-                            }));
+                        spawned.push(
+                            std::move(
+                                std::thread(
+                                    [=](struct ScotMessageHeader* received_pos) -> void { 
+                                        if (ext_func != nullptr)
+                                            ext_func(rep_buf, rep_buflen);
+                                        // printf("rcvd: %p\n", received_pos);
+
+                                        received_pos->msg = SCOT_MSGTYPE_NONE;
+                                    }, MSGHDRPTR_LOOKALIKE(rcvd))
+                                )
+                            );
                     }
                 }
             }
@@ -144,18 +138,21 @@ void scot::ScotReplayer::__worker(
         // 
         // Spawn one in each qpool segment,
         //  to serialize.
-        if (spawned.size() != 0) {
-            while (spawned.size() != 0) {
+        while (!spawned.empty()) {
 #ifdef __DEBUG__
-                __SCOT_INFO__(lc_out, "→ Waiting spawns to finish, left: {}", spawned.size());
+            __SCOT_INFO__(lc_out, "→→ Waiting spawns to finish, left: {}", spawned.size());
 #endif
-                spawned.front().join();
-                spawned.pop();
-            }
+            spawned.front().join();
+            spawned.pop();
 
-            for (auto& elemq: replayq_vec)
-                elemq.pop();
+#ifdef __DEBUG__
+            __SCOT_INFO__(lc_out, "→→ Front spawn finished, left: {}", spawned.size());
+#endif
         }
+        
+        for (auto& elemq: replayq_vec)
+            if (!elemq.empty())
+                elemq.pop();
     }
 }
 

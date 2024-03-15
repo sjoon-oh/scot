@@ -51,6 +51,9 @@ bool scot::ScotChecker::write_request(
             uintptr_t((*qlist)[0].local.mr->addr) + uintptr_t((*qlist)[0].offset)
         );
     int qpool_sid = (*qlist)[0].qpool_sid;
+    
+    // Register the status.
+    wait_list[qpool_sid].hashv = hashv;
 
     SCOT_LOGALIGN_T* header = write_local_log(log, &local_entry, 0);
     size_t logsz = sizeof(struct ScotMessageHeader) + 
@@ -61,6 +64,10 @@ bool scot::ScotChecker::write_request(
 
     bool ret = 0;
     for (auto& ctx: (*qlist)) {
+
+        remote_target_addr = 
+            reinterpret_cast<SCOT_LOGALIGN_T*>(
+                    uintptr_t(ctx.remote.mr->addr) + uintptr_t(ctx.offset) + offset);
 
         if (owner == ctx.rnid) {
 
@@ -78,8 +85,10 @@ bool scot::ScotChecker::write_request(
                 ctx.rnid);
 
 #ifdef __DEBUG__
-            if (ret != false)
-                __SCOT_INFO__(msg_out, "→→ RDMA Write failed");
+            if (ret == false) {
+                __SCOT_WARN__(msg_out, "→→ RDMA Write failed");
+                // assert(0);
+            }
 #endif
 
 
@@ -100,8 +109,10 @@ bool scot::ScotChecker::write_request(
                 ctx.rnid);
 
 #ifdef __DEBUG__
-            if (ret != false)
-                __SCOT_INFO__(msg_out, "→→ RDMA Write failed");
+            if (ret == false) {
+                __SCOT_WARN__(msg_out, "→→ RDMA Write failed");
+                // assert(0);
+            }
 #endif
     
         }
@@ -109,8 +120,8 @@ bool scot::ScotChecker::write_request(
         ret = hartebeest_rdma_send_poll(ctx.local.qp);
 
 #ifdef __DEBUG__
-            if (ret != false)
-                __SCOT_INFO__(msg_out, "→→ CQ poll not successful");
+            if (ret == false)
+                __SCOT_WARN__(msg_out, "→→ CQ poll not successful");
 #endif
     }
 
@@ -119,13 +130,22 @@ bool scot::ScotChecker::write_request(
     while (wait_list[qpool_sid].in_wait.load(std::memory_order_acquire) == 0)
         ;
 
+    ctx_pool->push_qlist(qlist);
     SCOT_QPOOL_END
+
+#ifdef __DEBUG__
+    __SCOT_INFO__(msg_out, "→→ {} END", __func__);
+#endif
     
     return 0;
 }
 
 
 void scot::ScotChecker::release_wait(uint32_t hashv) {
+
+#ifdef __DEBUG__
+        __SCOT_INFO__(msg_out, "→→ Trying release for {}", hashv);
+#endif
 
     for (int idx = 0; idx < wait_list_sz; idx) {
         
@@ -136,7 +156,6 @@ void scot::ScotChecker::release_wait(uint32_t hashv) {
                 __SCOT_INFO__(msg_out, "→→ Checker released, for {}", hashv);
 #endif
             }
-                
         }
     }
 }

@@ -41,7 +41,7 @@ void worker(int nid, int tid, int gen_sz, int key_sz, int req_num, scot::ScotCor
 
     m_out.get_logger()->info("{} spawned.", logger_name);
 
-    std::mt19937 generator((unsigned int)time(NULL));
+    std::mt19937 generator((unsigned int)time(NULL) + tid);
     std::hash<std::string> hm;
 
     scot::ScotTimestamp ts(logger_name + ".csv");
@@ -82,11 +82,11 @@ void worker(int nid, int tid, int gen_sz, int key_sz, int req_num, scot::ScotCor
     sleep(20);
 
     for (int i = 0; i < req_num; i++) {
-        free(static_buffer[i]);
+        std::free(static_buffer[i]);
     }
 
-    free(static_buffer);
-    free(hashv);
+    std::free(static_buffer);
+    std::free(hashv);
 
     return;
 }

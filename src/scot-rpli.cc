@@ -132,7 +132,6 @@ bool scot::ScotReplicator::write_request(
             SCOT_LOGALIGN_T* remote_target_addr;
 
             bool ret = 0;
-
             for (auto& ctx: (*qlist)) {
 
                 // size_t relative_offset = ctx.offset + offset;

@@ -160,17 +160,19 @@ int scot::ScotCore::propose(
     struct ScotOwnership ownership;
     uint_judge.judge(&ownership, hashv);
 
-#ifdef __DEBUG__
-    __SCOT_INFO__(msg_out, "→ Proposing {}, owner({}).", hashv, ownership.owner);
-#endif
-
     if (ownership.owner == nid) {
+#ifdef __DEBUG__
+    __SCOT_INFO__(msg_out, "→ (RPLI) PROPOSE {}, owner({}).", hashv, ownership.owner);
+#endif
         rpli->write_request(
             buf, buf_sz, key, key_sz, hashv, SCOT_MSGTYPE_PURE
         );
         return SCOT_MSGTYPE_PURE;
     }
     else {
+#ifdef __DEBUG__
+    __SCOT_INFO__(msg_out, "→ (CHKR) WAIT {}, owner({}).", hashv, ownership.owner);
+#endif
         chkr->write_request(
             buf, buf_sz, key, key_sz, hashv, ownership.owner
         );

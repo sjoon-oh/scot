@@ -5,7 +5,7 @@
  * https://github.com/sjoon-oh/
  */
 
-#define __DEBUG__
+#define __DEBUG__X
 
 // Default Envar
 // ID starts with 0, monotonically, at initialization..

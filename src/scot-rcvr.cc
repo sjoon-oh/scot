@@ -87,12 +87,6 @@ void scot::ScotReceiver::__worker(
         idx = 0;
         for (auto base: base_list) {
 
-#ifdef __DEBUG__
-            // __SCOT_INFO__(
-            //     lc_out, "Before peek: 0x{:x}", uintptr_t(base)
-            // );
-#endif
-
             SCOT_LOG_FINEGRAINED_T* rcvd = 
                 FINEPTR_LOOKALIKE(
                     peek_message(
@@ -101,43 +95,52 @@ void scot::ScotReceiver::__worker(
                     )
                 );
 
-#ifdef __DEBUG__
-            // __SCOT_INFO__(
-            //     lc_out, "After peek: 0x{:x}", uintptr_t(rcvd)
-            // );
-#endif
-
             pyld = FINEPTR_LOOKALIKE(rcvd) + uintptr_t(sizeof(struct ScotMessageHeader));
 
             //
             // After peek, and if received the full message,
             if (rcvd != nullptr) {
-                
-                spawned.push(std::thread(
-                    [&]() -> void { 
-                        rpli->write_request(
-                            pyld, 
-                            MSGHDRPTR_LOOKALIKE(rcvd)->buf_sz, 
-                            nullptr, 
-                            0, 
-                            MSGHDRPTR_LOOKALIKE(rcvd)->hashv, 
-                            SCOT_MSGTYPE_ACK
-                        );
+                if (reinterpret_cast<struct ScotMessageHeader*>(rcvd)->msg != SCOT_MSGTYPE_HDRONLY ) {
 
-                        if (ext_func != nullptr)
-                            ext_func(rcvd, MSGHDRPTR_LOOKALIKE(rcvd)->buf_sz);
-                        
-                        MSGHDRPTR_LOOKALIKE(rcvd)->msg = SCOT_MSGTYPE_NONE;
-                    }));
+#ifdef __DEBUG__
+                    uint32_t hashv_local = reinterpret_cast<struct ScotMessageHeader*>(rcvd)->hashv;
+                    __SCOT_INFO__(
+                        lc_out, "ACK as RPLI, hashv: {}, pyld: {}", hashv_local, (char*)pyld
+                    );
+#endif
+                    spawned.push(
+                        std::move(
+                            std::thread(
+                            [=]() -> void { 
+                                rpli->write_request(
+                                    pyld, 
+                                    MSGHDRPTR_LOOKALIKE(rcvd)->buf_sz, 
+                                    nullptr, 
+                                    0, 
+                                    MSGHDRPTR_LOOKALIKE(rcvd)->hashv, 
+                                    SCOT_MSGTYPE_ACK
+                                );
+
+                                if (ext_func != nullptr)
+                                    ext_func(rcvd, MSGHDRPTR_LOOKALIKE(rcvd)->buf_sz);
+                                
+                                MSGHDRPTR_LOOKALIKE(rcvd)->msg = SCOT_MSGTYPE_NONE;
+                            }))
+                    );
+                }
             }
         }
 
-        while (spawned.size() != 0) {
+        while (!spawned.empty()) {
 #ifdef __DEBUG__
             __SCOT_INFO__(lc_out, "→ Waiting spawns to finish, left: {}", spawned.size());
 #endif
             spawned.front().join();
             spawned.pop();
+#ifdef __DEBUG__
+            __SCOT_INFO__(lc_out, "→ Front spawn finished, left: {}", spawned.size());
+#endif
+
         }
     }
 }

@@ -6,9 +6,10 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_VERBOSE_MAKEFILE true)
 
 add_compile_options(
-    "-Wall" "$<$<CONFIG:DEBUG>:-O0;-g3;-ggdb>"
+    "-Wall" "$<$<CONFIG:DEBUG>:-O0;-ggdb;>"
 )
 # cmake . -DCMAKE_BUILD_TYPE=Debug
+# run 24 8 4
 
 
 add_subdirectory(${PROJECT_SOURCE_DIR}/hartebeest)
